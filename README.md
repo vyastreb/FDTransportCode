@@ -5,17 +5,20 @@
 ## Description
 
 An efficient python code to solve diffusion equation on a Cartesian grid:
-$$
+
+$
 \nabla\cdot\left(g^3 \nabla p\right) = 0,
-$$
-$$
+$
+
+$
 p(x=0) = 1, \quad p(x=1) = 0
-$$
-$$
+$
+
+$
 p(y=0) = p(y=1), \quad 
 \left.\frac{\partial p}{\partial y}\right|_{y=0} =
 \left.\frac{\partial p}{\partial y}\right|_{y=1}
-$$
+$
 
 ## What can it do?
 

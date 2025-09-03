@@ -52,6 +52,12 @@ if flux is not None: plt.imshow(np.sqrt(flux[:,:,0]**2 + flux[:,:,1]**2), origin
 ```
 4. Try a more advanced test `Transport_code_accelerated_test.py`.
 
+## Performance
+
+Performance of the code on a single circular inclusion problem, inclusion radius is $r = 0.2/L$.
+
+![CPU and RAM performance of the solver](CPU_RAM_performance.png)
+
 ## Info
 
 Author: Vladislav A. Yastrebov (CNRS, Mines Paris - PSL)

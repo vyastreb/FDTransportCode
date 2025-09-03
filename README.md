@@ -60,9 +60,10 @@ Performance of the code on a single circular inclusion problem, inclusion radius
 
 ## Info
 
-Author: Vladislav A. Yastrebov (CNRS, Mines Paris - PSL)
-License: BSD 3-clause
-Date: Sept 2025
++ Author: Vladislav A. Yastrebov (CNRS, Mines Paris - PSL)
++ AI usage: Cursor (different models), ChatGPT 4o, 5, Claude Sonnet 3.7, 4
++ License: BSD 3-clause
++ Date: Sept 2025
 
 
 

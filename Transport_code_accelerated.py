@@ -43,7 +43,7 @@ def set_verbosity(level='info'):
 
 @jit(nopython=True)
 def _build_matrix_elements(n, g, penalty):
-    """Numba-accelerated matrix element calculation"""
+    """Numba-accelerated matrix element calculation with external reservoir BCs"""
     dx = 1.0 / (n - 1)
     N = n * n
     
@@ -57,38 +57,85 @@ def _build_matrix_elements(n, g, penalty):
         for j in range(n):
             idx = i * n + j
             
-            if i == n - 1:  # Right boundary (x = 1)
-                if g[i,j] != 0:
-                    row_indices.append(idx)
-                    col_indices.append(idx)
-                    data.append(penalty)
-                    b[idx] = penalty
-                else:
-                    row_indices.append(idx)
-                    col_indices.append(idx)
-                    data.append(1.0)
-                    b[idx] = 0
-            elif i == 0:  # Left boundary (x = 0)
+            if g[i,j] == 0:  # Blocked cells
                 row_indices.append(idx)
                 col_indices.append(idx)
-                data.append(penalty)
+                data.append(1.0)
                 b[idx] = 0
-            else:
-                g_e = 0.5 * (g[i,j]**3 + g[i+1,j]**3)
-                g_w = 0.5 * (g[i,j]**3 + g[i-1,j]**3)
-                g_n = 0.5 * (g[i,j]**3 + g[i,(j+1)%n]**3)
-                g_s = 0.5 * (g[i,j]**3 + g[i,(j-1)%n]**3)
-                
-                if g[i+1,j] == 0:
-                    g_e = 0
-                if g[i-1,j] == 0:
-                    g_w = 0
-                if g[i,(j+1)%n] == 0:
-                    g_n = 0
-                if g[i,(j-1)%n] == 0:
-                    g_s = 0
+            else:  # Open cells (including boundaries)
+                if i == 0:  # Left boundary - external reservoir at p=0
+                    # Calculate conductivities
+                    g_e = 0.5 * (g[i,j]**3 + g[i+1,j]**3) if i+1 < n and g[i+1,j] > 0 else 0
+                    g_w = g[i,j]**3  # Connection to external reservoir at p=0
+                    g_n = 0.5 * (g[i,j]**3 + g[i,(j+1)%n]**3) if g[i,(j+1)%n] > 0 else 0
+                    g_s = 0.5 * (g[i,j]**3 + g[i,(j-1)%n]**3) if g[i,(j-1)%n] > 0 else 0
                     
-                if g[i,j] > 0:
+                    # Diagonal element
+                    row_indices.append(idx)
+                    col_indices.append(idx)
+                    data.append(-(g_e + g_w + g_n + g_s) / dx)
+                    
+                    # Off-diagonal elements
+                    if g_e > 0:
+                        row_indices.append(idx)
+                        col_indices.append((i+1) * n + j)
+                        data.append(g_e / dx)
+                    if g_n > 0:
+                        row_indices.append(idx)
+                        col_indices.append(i * n + (j+1)%n)
+                        data.append(g_n / dx)
+                    if g_s > 0:
+                        row_indices.append(idx)
+                        col_indices.append(i * n + (j-1)%n)
+                        data.append(g_s / dx)
+                    
+                    # RHS contribution from external reservoir (p=0)
+                    b[idx] = -g_w / dx * 0.0  # = 0, but keeping for clarity
+                    
+                elif i == n-1:  # Right boundary - external reservoir at p=1
+                    # Calculate conductivities
+                    g_e = g[i,j]**3  # Connection to external reservoir at p=1
+                    g_w = 0.5 * (g[i,j]**3 + g[i-1,j]**3) if i-1 >= 0 and g[i-1,j] > 0 else 0
+                    g_n = 0.5 * (g[i,j]**3 + g[i,(j+1)%n]**3) if g[i,(j+1)%n] > 0 else 0
+                    g_s = 0.5 * (g[i,j]**3 + g[i,(j-1)%n]**3) if g[i,(j-1)%n] > 0 else 0
+                    
+                    # Diagonal element
+                    row_indices.append(idx)
+                    col_indices.append(idx)
+                    data.append(-(g_e + g_w + g_n + g_s) / dx)
+                    
+                    # Off-diagonal elements
+                    if g_w > 0:
+                        row_indices.append(idx)
+                        col_indices.append((i-1) * n + j)
+                        data.append(g_w / dx)
+                    if g_n > 0:
+                        row_indices.append(idx)
+                        col_indices.append(i * n + (j+1)%n)
+                        data.append(g_n / dx)
+                    if g_s > 0:
+                        row_indices.append(idx)
+                        col_indices.append(i * n + (j-1)%n)
+                        data.append(g_s / dx)
+                    
+                    # RHS contribution from external reservoir (p=1)
+                    b[idx] = -g_e / dx * 1.0
+                    
+                else:  # Interior points
+                    g_e = 0.5 * (g[i,j]**3 + g[i+1,j]**3)
+                    g_w = 0.5 * (g[i,j]**3 + g[i-1,j]**3)
+                    g_n = 0.5 * (g[i,j]**3 + g[i,(j+1)%n]**3)
+                    g_s = 0.5 * (g[i,j]**3 + g[i,(j-1)%n]**3)
+                    
+                    if g[i+1,j] == 0:
+                        g_e = 0
+                    if g[i-1,j] == 0:
+                        g_w = 0
+                    if g[i,(j+1)%n] == 0:
+                        g_n = 0
+                    if g[i,(j-1)%n] == 0:
+                        g_s = 0
+                        
                     # Diagonal element
                     row_indices.append(idx)
                     col_indices.append(idx)
@@ -111,10 +158,6 @@ def _build_matrix_elements(n, g, penalty):
                         row_indices.append(idx)
                         col_indices.append(i * n + (j-1)%n)
                         data.append(g_s / dx)
-                else:
-                    row_indices.append(idx)
-                    col_indices.append(idx)
-                    data.append(1.0)
     
     return np.array(row_indices), np.array(col_indices), np.array(data), b
 
@@ -122,11 +165,11 @@ def _build_matrix_elements(n, g, penalty):
 Create the sparse matrix for the diffusion problem with non-homogeneous gap field,
 properly handling zero or near-zero gap regions.
 """
-def create_diffusion_matrix(n, g, penalty):
+def create_diffusion_matrix(n, g, penalty=None):
     """Create matrix using Numba-accelerated element calculation"""
     
     # Use numba-accelerated function for heavy computation
-    row_indices, col_indices, data, b = _build_matrix_elements(n, g, penalty)
+    row_indices, col_indices, data, b = _build_matrix_elements(n, g, 0)  # penalty not used anymore
     
     # Create sparse matrix
     N = n * n
@@ -135,6 +178,73 @@ def create_diffusion_matrix(n, g, penalty):
     
     return A, b
 
+
+@jit(nopython=True)
+def _calculate_gradients_simple_bc(n, p, dx, gaps):
+    """Simple gradient calculation with proper boundary conditions"""
+    dpdx = np.zeros((n, n))
+    dpdy = np.zeros((n, n))
+    
+    for i in range(n):
+        for j in range(n):
+            if gaps[i, j] > 0:
+                # X-direction gradient
+                if i == 0:  # Left boundary: p = 0
+                    # Use forward difference: dp/dx = (p[1] - p[0])/dx
+                    # But we know p[0] should be 0, so use actual BC
+                    dpdx[i, j] = (p[i, j] - 0.0) / dx
+                elif i == n-1:  # Right boundary: p = 1
+                    # Use backward difference: dp/dx = (p[n-1] - p[n-2])/dx
+                    # But we know p[n-1] should be 1, so use actual BC
+                    dpdx[i, j] = (1.0 - p[i, j]) / dx
+                else:  # Interior: central difference
+                    dpdx[i, j] = (p[i+1, j] - p[i-1, j]) / (2.0 * dx)
+                
+                # Y-direction gradient (periodic)
+                j_plus = (j + 1) % n
+                j_minus = (j - 1) % n
+                dpdy[i, j] = (p[i, j_plus] - p[i, j_minus]) / (2.0 * dx)
+            
+    return dpdx, dpdy
+
+@jit(nopython=True)
+def _dilate_gaps_numba(gaps, iterations=1):
+    """Numba-accelerated morphological dilation of gap field"""
+    n = gaps.shape[0]
+    dilated = gaps.copy()
+    
+    for _ in range(iterations):
+        temp = dilated.copy()
+        for i in range(n):
+            for j in range(n):
+                if dilated[i, j] == 0:  # Only dilate into zero regions
+                    # Check 4-connected neighbors
+                    max_neighbor = 0.0
+                    
+                    # Check left neighbor
+                    if i > 0 and dilated[i-1, j] > max_neighbor:
+                        max_neighbor = dilated[i-1, j]
+                    
+                    # Check right neighbor
+                    if i < n-1 and dilated[i+1, j] > max_neighbor:
+                        max_neighbor = dilated[i+1, j]
+                    
+                    # Check down neighbor (periodic)
+                    j_down = (j - 1) % n
+                    if dilated[i, j_down] > max_neighbor:
+                        max_neighbor = dilated[i, j_down]
+                    
+                    # Check up neighbor (periodic)
+                    j_up = (j + 1) % n
+                    if dilated[i, j_up] > max_neighbor:
+                        max_neighbor = dilated[i, j_up]
+                    
+                    if max_neighbor > 0:
+                        temp[i, j] = max_neighbor
+        
+        dilated = temp
+    
+    return dilated
 
 @jit(nopython=True)
 def _threshold_numba(matrix, z0):
@@ -148,6 +258,60 @@ def _threshold_numba(matrix, z0):
 
 def threshold(matrix, z0):
     return _threshold_numba(matrix, z0)
+
+@jit(nopython=True)
+def _calculate_gradients_with_bc_numba(n, p, dx, gaps):
+    """Gradient calculation respecting Dirichlet boundary conditions"""
+    dpdx = np.zeros((n, n))
+    dpdy = np.zeros((n, n))
+    
+    for i in range(n):
+        for j in range(n):
+            # X-direction gradient (horizontal)
+            if i == 0:  # Left boundary: p = 0
+                # Use boundary condition: p[0,j] = 0, forward difference to interior
+                if gaps[i, j] > 0:
+                    dpdx[i, j] = (p[i+1, j] - 0.0) / dx  # Known BC: p=0 at left
+                else:
+                    dpdx[i, j] = 0.0
+            elif i == n-1:  # Right boundary: p = 1 (where gap > 0)
+                # Use boundary condition: p[n-1,j] = 1 for open channels
+                if gaps[i, j] > 0:
+                    dpdx[i, j] = (1.0 - p[i-1, j]) / dx  # Known BC: p=1 at right
+                else:
+                    dpdx[i, j] = 0.0
+            else:  # Interior points - central difference
+                if gaps[i, j] > 0:
+                    # Check if neighbors exist for central difference
+                    if gaps[i-1, j] > 0 and gaps[i+1, j] > 0:
+                        dpdx[i, j] = (p[i+1, j] - p[i-1, j]) / (2.0 * dx)
+                    elif gaps[i+1, j] > 0:  # Only right neighbor
+                        dpdx[i, j] = (p[i+1, j] - p[i, j]) / dx
+                    elif gaps[i-1, j] > 0:  # Only left neighbor
+                        dpdx[i, j] = (p[i, j] - p[i-1, j]) / dx
+                    else:
+                        dpdx[i, j] = 0.0
+                else:
+                    dpdx[i, j] = 0.0
+            
+            # Y-direction gradient (vertical) - periodic boundaries
+            if gaps[i, j] > 0:
+                j_plus = (j + 1) % n
+                j_minus = (j - 1) % n
+                
+                # Use central difference for periodic boundaries
+                if gaps[i, j_plus] > 0 and gaps[i, j_minus] > 0:
+                    dpdy[i, j] = (p[i, j_plus] - p[i, j_minus]) / (2.0 * dx)
+                elif gaps[i, j_plus] > 0:  # Only up neighbor
+                    dpdy[i, j] = (p[i, j_plus] - p[i, j]) / dx
+                elif gaps[i, j_minus] > 0:  # Only down neighbor
+                    dpdy[i, j] = (p[i, j] - p[i, j_minus]) / dx
+                else:
+                    dpdy[i, j] = 0.0
+            else:
+                dpdy[i, j] = 0.0
+    
+    return dpdx, dpdy
 
 @jit(nopython=True)
 def _calculate_flux_numba(n, gaps, dpdx, dpdy):
@@ -164,31 +328,37 @@ def _calculate_flux_numba(n, gaps, dpdx, dpdy):
 
 @jit(nopython=True)
 def _filter_flux_numba(n, gaps, flux):
-    """Numba-accelerated flux filtering"""
+    """Numba-accelerated flux filtering - conservative approach"""
     filtered_flux = flux.copy()
     
     for i in range(n):
         for j in range(n):
-            if (gaps[i,j] == 0 or 
-                gaps[(i+1)%n,j] == 0 or 
-                gaps[i,(j+1)%n] == 0 or 
-                gaps[(i-1)%n,j] == 0 or 
-                gaps[i,(j-1)%n] == 0):
+            # Only filter if current cell has zero gap
+            if gaps[i,j] == 0:
                 filtered_flux[i,j,0] = np.nan
                 filtered_flux[i,j,1] = np.nan
+            else:
+                # For x-direction flux: only filter if both neighboring x-cells are closed
+                if gaps[(i+1)%n,j] == 0 and gaps[(i-1)%n,j] == 0:
+                    filtered_flux[i,j,0] = np.nan
+                # For y-direction flux: only filter if both neighboring y-cells are closed  
+                if gaps[i,(j+1)%n] == 0 and gaps[i,(j-1)%n] == 0:
+                    filtered_flux[i,j,1] = np.nan
+
+            # Alternative: Even more conservative - only filter the current cell if it's closed
+            # if gaps[i,j] == 0:
+            #     filtered_flux[i,j,0] = np.nan
+            #     filtered_flux[i,j,1] = np.nan
     
     return filtered_flux
 
 def solve_diffusion(n, g, solver="auto"):
+    """Solve diffusion with external reservoir boundary conditions"""
     mean_gap = np.mean(g)
-    if mean_gap > 0:
-        dx = 1.0 / (n - 1)
-        penalty = mean_gap**3 / dx * 1e4
-        logger.info(f"Using penalty: {penalty:.3e}")
-    else:
+    if mean_gap <= 0:
         raise ValueError("Invalid gap field")
 
-    A, b = create_diffusion_matrix(n, g, penalty)
+    A, b = create_diffusion_matrix(n, g, None)  # No penalty needed
     A = A.tocsr()  
 
     # Auto-select solver based on problem size
@@ -206,10 +376,6 @@ def solve_diffusion(n, g, solver="auto"):
         M = None
         try:
             M = get_preconditioner(A, method="amg")
-            # # AMG preconditioner
-            # ml = smoothed_aggregation_solver(A, max_coarse=A.shape[0] // 1000)
-            # M = ml.aspreconditioner(cycle="V")
-
         except:
             logger.warning("AMG preconditioner failed, using ILU instead.")
             try:
@@ -217,9 +383,6 @@ def solve_diffusion(n, g, solver="auto"):
             except:
                 logger.warning("ILU preconditioner failed, using no preconditioner.")
                 M = None
-        # # Alternative preconditioner
-        # ilu = spilu(A.tocsc(), drop_tol=1e-5)
-        # M = LinearOperator(A.shape, ilu.solve)
 
         # Calculate relative tolerance based on gap field
         max_gap_cubed = np.max(g**3)
@@ -229,10 +392,6 @@ def solve_diffusion(n, g, solver="auto"):
             raise ValueError("Invalid gap field for tolerance calculation")
 
         p, info = cg(A, b, M=M, rtol=rtol, maxiter=6000)
-
-        # Alternative solvers
-        # p, info = gmres(A, b, M=M, rtol=rtol, maxiter=6000, restart=30)
-        # p, info = bicgstab(A, b, M=M, rtol=1e-22, maxiter=10000) 
                 
         if info > 0:
             print(f"Convergence to tolerance not achieved in {info} iterations")
@@ -284,33 +443,36 @@ def solve_fluid_problem(gaps, solver):
         return None, None, None
 
     # To get rid of lakes surrounded by contact (trapped fluid)
-    gaps = gaps * (labels == selected_color)
+    gaps_original = gaps * (labels == selected_color)
+    
+    # Apply dilation before solving to preserve boundary data
+    logger.info("Applying dilation to preserve boundary channels.")
+    gaps_dilated = _dilate_gaps_numba(gaps_original, iterations=1)
 
     logger.info("Solving diffusion problem.")
     try:
-        # Solve for pressure
+        # Solve for pressure using dilated gaps
         start_time = time.time()
-        p = solve_diffusion(n, gaps, solver)
+        p = solve_diffusion(n, gaps_dilated, solver)
         logger.info("Fluid solver: CPU time for n = {0:d}: {1:.3f} sec".format(n, time.time() - start_time))
     except Exception as e:
         logger.error("Error in fluid solver: ", e)
         return None, None, None
 
     logger.info("Fluid solver finished.")
-    logger.info("Calculating flux.")
+    logger.info("Calculating flux with simple boundary condition approach.")
 
-    # Calculate flux using accelerated functions
+    # Calculate gradients with proper boundary conditions
     dx = 1 / (n - 1)
-    dpdx = np.gradient(p, dx, axis=1)
-    dpdy = np.gradient(p, dx, axis=0)
+    dpdx, dpdy = _calculate_gradients_simple_bc(n, p, dx, gaps_original)
 
-    # Use numba-accelerated flux calculation
-    flux = _calculate_flux_numba(n, gaps, dpdx, dpdy)
-    filtered_flux = _filter_flux_numba(n, gaps, flux)
+    # Use numba-accelerated flux calculation with ORIGINAL gaps
+    flux = _calculate_flux_numba(n, gaps_original, dpdx, dpdy)
+    filtered_flux = _filter_flux_numba(n, gaps_original, flux)
     
     logger.info("finished.")
 
-    return gaps, p, filtered_flux
+    return gaps_original, p, filtered_flux
 
 def get_preconditioner(A, method="amg"):
     if method == "amg":
@@ -331,6 +493,43 @@ def get_preconditioner(A, method="amg"):
     
     return None
 
+# Total flux calculation
+def compute_total_flux(filtered_gaps, flux, N0):
+        """
+        Compute total flux and conservation error by integrating over inlet and outlet boundaries.
+        Returns Q_total and flux_conservation_error.
+        """
+        dy = 1.0 / (N0 - 1)  # Grid spacing in y-direction
+
+        # Inlet flux (x=0, i=0): integrate flux_x over y-direction
+        flux_inlet = 0.0
+        active_inlet_cells = 0
+        for j in range(N0):
+            if not np.isnan(flux[0, j, 0]) and filtered_gaps[0, j] > 0:
+                flux_inlet += flux[0, j, 0] * dy
+                active_inlet_cells += 1
+
+        # Outlet flux (x=1, i=N0-1): integrate flux_x over y-direction  
+        flux_outlet = 0.0
+        active_outlet_cells = 0
+        for j in range(N0):
+            if not np.isnan(flux[N0-1, j, 0]) and filtered_gaps[N0-1, j] > 0:
+                flux_outlet += flux[N0-1, j, 0] * dy
+                active_outlet_cells += 1
+
+        # Total flux through domain 
+        Q_total = 0.5 * (abs(flux_inlet) + abs(flux_outlet))
+        flux_conservation_error = abs(flux_inlet - flux_outlet) / max(Q_total, 1e-15)
+
+        logger.info("> Flux computation <")
+        logger.info(f"Inlet flux (x=0):     {flux_inlet:.6e} [Active cells: {active_inlet_cells}]")
+        logger.info(f"Outlet flux (x=1):    {flux_outlet:.6e} [Active cells: {active_outlet_cells}]")
+        logger.info(f"Total average flux (Q_total): {Q_total:.6e}")
+        logger.info(f"Conservation error:   {flux_conservation_error:.2e} ({flux_conservation_error*100:.2f}%)")
+
+        return Q_total, flux_conservation_error
+
+
 def _warmup_numba_functions():
     """Warm up Numba JIT compilation with minimal test cases"""
     logger.info("Warming up Numba JIT compilation...")
@@ -349,6 +548,19 @@ def _warmup_numba_functions():
     # Warm up threshold function
     try:
         _threshold_numba(g_test, 0.05)
+    except:
+        pass
+    
+    # Warm up dilation function
+    try:
+        _dilate_gaps_numba(g_test, iterations=1)
+    except:
+        pass
+    
+    # Warm up simple gradient calculation
+    try:
+        p_test = np.ones((n_test, n_test), dtype=np.float64)
+        _calculate_gradients_simple_bc(n_test, p_test, 0.5, g_test)
     except:
         pass
     

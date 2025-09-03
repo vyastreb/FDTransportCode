@@ -19,9 +19,11 @@ $$
 
 + It takes as input a gap field $g$.
 + It analyzes its connectivity and removes isolated islands and checks for percolation (whether a flow problem can be solved).
++ It dilates non-zero gap field to properly handle impenetrability of channels, it allows not to erode the domain for flux calculation.
 + It applies an inlet pressure $p_i=1$  on one side $x=0$ and an outlet pressure $p_0=0$ on the opposite side $x=1$ and uses periodic boundary conditions on the lateral sides $y=\{0,1\}$.
 + It constructs a sparse matrix with conductivity proportional to $g^3$.
 + The linear system of equations is solved by a direct (`pardiso_spsolve`) or an iterative solver (CG with AMG preconditioner).
++ Total flux is properly computed.
 
 ## Usage
 
@@ -50,7 +52,7 @@ gaps = (np.sqrt((X - 0.5)**2 + (Y - 0.5)**2) > 0.2).astype(float)
 _, _, flux = FS.solve_fluid_problem(gaps, "auto")
 if flux is not None: plt.imshow(np.sqrt(flux[:,:,0]**2 + flux[:,:,1]**2), origin='lower', cmap='jet'); plt.show()
 ```
-4. Try a more advanced test `Transport_code_accelerated_test.py`.
+4. Try a more advanced tests `Evolution_test.py` and `Solution_test.py`.
 
 ## Performance
 

@@ -1,6 +1,14 @@
+"""
+Finite-Difference Reynolds Fluid Flow Solver
+
+Author: Vladislav A. Yastrebov (CNRS, Mines Paris - PSL)
+AI: Cursor, Claude, ChatGPT
+Date: Aug 2024-Sept 2025
+License: BSD 3-Clause
+"""
 import numpy as np
 from scipy.ndimage import label
-from scipy.sparse import lil_matrix
+from scipy.sparse import lil_matrix, coo_matrix
 from numba import jit, prange
 ## For iterative solver if needed
 from pyamg import smoothed_aggregation_solver
@@ -116,7 +124,6 @@ properly handling zero or near-zero gap regions.
 """
 def create_diffusion_matrix(n, g, penalty):
     """Create matrix using Numba-accelerated element calculation"""
-    from scipy.sparse import coo_matrix
     
     # Use numba-accelerated function for heavy computation
     row_indices, col_indices, data, b = _build_matrix_elements(n, g, penalty)

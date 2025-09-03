@@ -1,0 +1,9 @@
+EXTRAs/
+TESTs/
+__pycache__/
+cpu_time_new2.data
+header.svg
+minimal_test.py
+new_CPU_RAM_performance.pdf
+performance_test.py
+plot_CPU_performance.py

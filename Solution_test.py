@@ -12,28 +12,34 @@ import matplotlib.pyplot as plt
 from numpy.fft import ifft2, fftfreq, fftshift, ifftshift, fftn, ifftn
 import time
 
+
 import Transport_code_accelerated as FS
 import RandomField as rf # https://github.com/vyastreb/SelfAffineSurfaceGenerator
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 FS.setup_logging()  
-# FS.set_verbosity('info')
-FS.set_verbosity('warning')
+FS.set_verbosity('info')
+# FS.set_verbosity('warning')
 
 # Plotting function
+# Plotting function
 def plot_fields(g, pressure, flux, suffix="", VectorField=False, plot_n_vectors = 50):
-    # Plot gap function
+    # 
+    X, Y = np.meshgrid(np.linspace(0, 1, g.shape[0]), np.linspace(0, 1, g.shape[1]))
+
     N0 = g.shape[0]
     gg = g.copy()
     gg[gg<=0] = np.nan
-    fig, ax = plt.subplots(figsize=(10, 8))
-    cax = ax.imshow(gg, cmap='viridis', origin='lower', extent=[0, 1, 0, 1], interpolation="none")
-    fig.colorbar(cax, label='Gap')
-    ax.set_title('Gap Function')
-    ax.set_xlabel('X')
-    ax.set_ylabel('Y')
-    plt.show()
-    fig.savefig(f"FS_gap_{suffix}.png",dpi=300)
+
+    # # Plot gap function
+    # fig, ax = plt.subplots(figsize=(10, 8))
+    # cax = ax.imshow(gg, cmap='viridis', origin='lower', extent=[0, 1, 0, 1], interpolation="none")
+    # fig.colorbar(cax, label='Gap')
+    # ax.set_title('Gap Function')
+    # ax.set_xlabel('X')
+    # ax.set_ylabel('Y')
+    # plt.show()
+    # fig.savefig(f"FS_gap_{suffix}.png",dpi=300)
 
     # Pressure plot
     pressure[np.isnan(gg)] = np.nan
@@ -48,7 +54,7 @@ def plot_fields(g, pressure, flux, suffix="", VectorField=False, plot_n_vectors 
     ax.set_xlabel('X')
     ax.set_ylabel('Y')
     plt.show()
-    fig.savefig(f"FS_pressure_{suffix}.png",dpi=300)
+    fig.savefig(f"FS_pressure_n_{N0}_{suffix}.png",dpi=300)
 
     # Flux plot
     norm_flux = np.sqrt(flux[:,:,0]**2 + flux[:,:,1]**2)    
@@ -70,15 +76,21 @@ def plot_fields(g, pressure, flux, suffix="", VectorField=False, plot_n_vectors 
     ax.set_xlabel('X')
     ax.set_ylabel('Y')
     plt.show()
-    fig.savefig("FS_flux_vector_n_{0:d}_solver_{1}.png".format(N0, solver), dpi=300)
-
+    fig.savefig(f"FS_flux__n_{N0}_{suffix}.png", dpi=300)
+    
 ############################################
 #                     MAIN                 #
 ############################################
 
 def main():
-    N0 = 1024           # Size of the random field
-    solver = "direct"   # "direct" or "iterative" Solver to use for the diffusion problem
+    N0 = 8000           # Size of the random field
+    """
+        Available solvers:
+        + "scipy.amg.rs" - optimal for memory
+        + "cholesky"     - optimal for speed (if enough memory), only 10% more than petsc
+        + "petsc"        - very fast and memory efficient, 4x scipy.amg.rs and only 20% more memory
+    """
+    solver = "petsc"
     k_low =   4 / N0   # Lower cutoff of the power spectrum
     k_high = 32 / N0   # Upper cutoff of the power spectrum
     Hurst = 0.75         # Hurst exponent
@@ -98,7 +110,7 @@ def main():
     #           Compute and PLOT ALL                #
     #################################################
 
-    delta = 0.3
+    delta = 0.4
     g = random_field + delta
     g[g < 0] = 0
 
@@ -114,19 +126,19 @@ def main():
 
         plot_fields(filtered_gaps, pressure, flux, suffix=f"n_{N0}", VectorField=False, plot_n_vectors = 50)
 
-    # Solve for rotated orientation
-    g = np.rot90(g)
+    # # Solve for rotated orientation
+    # g = np.rot90(g)
 
-    start = time.time()
-    filtered_gaps, pressure, flux = FS.solve_fluid_problem(g, solver)
-    print("Time taken: ", time.time() - start, "s")
+    # start = time.time()
+    # filtered_gaps, pressure, flux = FS.solve_fluid_problem(g, solver)
+    # print("Time taken: ", time.time() - start, "s")
 
-    if flux is None:
-        print("No flux solution found.")
-    else:
-        Q_total, flux_conservation_error = FS.compute_total_flux(filtered_gaps, flux, N0)
+    # if flux is None:
+    #     print("No flux solution found.")
+    # else:
+    #     Q_total, flux_conservation_error = FS.compute_total_flux(filtered_gaps, flux, N0)
 
-        plot_fields(filtered_gaps, pressure, flux, suffix=f"n_{N0}", VectorField=False, plot_n_vectors = 50)
+    #     plot_fields(filtered_gaps, pressure, flux, suffix=f"n_{N0}", VectorField=False, plot_n_vectors = 50)
 
 if __name__ == "__main__":
     main()

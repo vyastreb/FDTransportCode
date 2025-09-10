@@ -6,21 +6,35 @@ AI: Cursor, Claude, ChatGPT
 Date: Aug 2024-Sept 2025
 License: BSD 3-Clause
 """
+
+# FIXME: something wrong happens over connections of 1 grid cell thickness.
+# TODO: adapt for compressible fluids (requires only postprocessing)
+
 import numpy as np
 from scipy.ndimage import label
 from scipy.sparse import lil_matrix, coo_matrix
-from numba import jit, prange
+from numba import jit, prange, njit
 ## For iterative solver if needed
-from pyamg import smoothed_aggregation_solver
-from scipy.sparse.linalg import spilu, LinearOperator, cg
+from scipy.sparse.linalg import LinearOperator, cg
 # Eventually
 #  from scipy.sparse.linalg import gmres, bicgstab, spsolve
 
-from pypardiso import spsolve as pypardiso_spsolve
+# Intel oneAPI Math Kernel Library PARDISO solver
+# import pypardiso #import spsolve as pypardiso_spsolve
+
+
+from scipy.sparse.linalg import spsolve
 
 import time
 import logging
 import gc
+
+import psutil
+import os
+
+# If need control over number of threads
+# os.environ['MKL_NUM_THREADS'] = '2'
+# os.environ['OMP_NUM_THREADS'] = '2'
 
 logger = logging.getLogger(__name__)
 
@@ -41,16 +55,115 @@ def set_verbosity(level='info'):
     }
     logger.setLevel(levels.get(level.lower(), logging.INFO))
 
-@jit(nopython=True)
-def _build_matrix_elements(n, g, penalty):
+# new version of matrix builder
+@njit
+def face_k(a, b):
+    # harmonic mean; if either side blocked -> 0
+    if a <= 0.0 or b <= 0.0:
+        return 0.0
+    return 2.0 * (a**3) * (b**3) / (a**3 + b**3)
+
+@njit   
+def _build_matrix_elements(n, g, penalty=0.0):
+    dx = 1.0 / (n - 1)
+    N = n * n
+
+    # Max 5 nonzeros per row
+    row_indices = np.empty(5 * N, dtype=np.int32)
+    col_indices = np.empty(5 * N, dtype=np.int32)
+    data = np.empty(5 * N, dtype=np.float64)
+    b = np.zeros(N, dtype=np.float64)  
+
+    nnz = 0
+    for i in range(n):
+        for j in range(n):
+            idx = i * n + j
+
+            if g[i, j] <= 0.0:  # blocked cell -> Dirichlet p=0
+                row_indices[nnz] = idx
+                col_indices[nnz] = idx
+                data[nnz] = 1.0
+                nnz += 1
+                b[idx] = 0.0
+                continue
+
+            # neighbors (periodic in j)
+            # east/west not periodic in i
+            ge = face_k(g[i, j], g[i+1, j]) if i+1 < n else 0.0
+            gw = face_k(g[i, j], g[i-1, j]) if i-1 >= 0 else 0.0
+            gn = face_k(g[i, j], g[i, (j+1) % n])
+            gs = face_k(g[i, j], g[i, (j-1) % n])
+
+            diag = 0.0
+
+            # West boundary: external reservoir p=0 at i==0
+            if i == 0:
+                # couple to external as Dirichlet term
+                gw = g[i, j]**3  # face to reservoir
+                diag += gw / dx
+                # RHS += gw/dx * p_W (p_W=0) -> no change
+            else:
+                if gw > 0.0:
+                    row_indices[nnz] = idx
+                    col_indices[nnz] = (i - 1) * n + j
+                    data[nnz] = -gw / dx
+                    nnz += 1
+                    diag += gw / dx
+
+            # East boundary: external reservoir p=1 at i==n-1
+            if i == n - 1:
+                ge = g[i, j]**3
+                diag += ge / dx
+                b[idx] += ge / dx * 1.0
+            else:
+                if ge > 0.0:
+                    row_indices[nnz] = idx
+                    col_indices[nnz] = (i + 1) * n + j
+                    data[nnz] = -ge / dx
+                    nnz += 1
+                    diag += ge / dx
+
+            # periodic north
+            if gn > 0.0:
+                row_indices[nnz] = idx
+                col_indices[nnz] = i * n + (j + 1) % n
+                data[nnz] = -gn / dx
+                nnz += 1
+                diag += gn / dx
+
+            # periodic south
+            if gs > 0.0:
+                row_indices[nnz] = idx
+                col_indices[nnz] = i * n + (j - 1) % n
+                data[nnz] = -gs / dx
+                nnz += 1
+                diag += gs / dx
+
+            # diagonal
+            row_indices[nnz] = idx
+            col_indices[nnz] = idx
+            data[nnz] = diag
+            nnz += 1
+
+    # trim
+    row_indices = row_indices[:nnz]
+    col_indices = col_indices[:nnz]
+    data = data[:nnz]
+    # b already length N
+
+    return row_indices, col_indices, data, b
+
+
+@njit
+def _build_matrix_elements_old(n, g, penalty):
     """Numba-accelerated matrix element calculation with external reservoir BCs"""
     dx = 1.0 / (n - 1)
     N = n * n
     
     # Pre-allocate arrays for matrix construction
-    row_indices = []
-    col_indices = []
-    data = []
+    row_indices = np.zeros(5 * N, dtype=np.int32)  # Max 5 non-zeros per row
+    col_indices = np.zeros(5 * N, dtype=np.int32)
+    data = np.zeros(5 * N, dtype=np.float64)
     b = np.zeros(N)
     
     for i in range(n):
@@ -58,9 +171,9 @@ def _build_matrix_elements(n, g, penalty):
             idx = i * n + j
             
             if g[i,j] == 0:  # Blocked cells
-                row_indices.append(idx)
-                col_indices.append(idx)
-                data.append(1.0)
+                row_indices[idx] = idx
+                col_indices[idx] = idx
+                data[idx] = 1.0
                 b[idx] = 0
             else:  # Open cells (including boundaries)
                 if i == 0:  # Left boundary - external reservoir at p=0
@@ -71,23 +184,23 @@ def _build_matrix_elements(n, g, penalty):
                     g_s = 0.5 * (g[i,j]**3 + g[i,(j-1)%n]**3) if g[i,(j-1)%n] > 0 else 0
                     
                     # Diagonal element
-                    row_indices.append(idx)
-                    col_indices.append(idx)
-                    data.append(-(g_e + g_w + g_n + g_s) / dx)
-                    
+                    row_indices[idx] = idx
+                    col_indices[idx] = idx
+                    data[idx] = -(g_e + g_w + g_n + g_s) / dx
+
                     # Off-diagonal elements
                     if g_e > 0:
-                        row_indices.append(idx)
-                        col_indices.append((i+1) * n + j)
-                        data.append(g_e / dx)
+                        row_indices[idx] = idx
+                        col_indices[idx] = (i+1) * n + j
+                        data[idx] = g_e / dx
                     if g_n > 0:
-                        row_indices.append(idx)
-                        col_indices.append(i * n + (j+1)%n)
-                        data.append(g_n / dx)
+                        row_indices[idx] = idx
+                        col_indices[idx] = i * n + (j+1)%n
+                        data[idx] = g_n / dx
                     if g_s > 0:
-                        row_indices.append(idx)
-                        col_indices.append(i * n + (j-1)%n)
-                        data.append(g_s / dx)
+                        row_indices[idx] = idx
+                        col_indices[idx] = i * n + (j-1)%n
+                        data[idx] = g_s / dx
                     
                     # RHS contribution from external reservoir (p=0)
                     b[idx] = -g_w / dx * 0.0  # = 0, but keeping for clarity
@@ -100,24 +213,24 @@ def _build_matrix_elements(n, g, penalty):
                     g_s = 0.5 * (g[i,j]**3 + g[i,(j-1)%n]**3) if g[i,(j-1)%n] > 0 else 0
                     
                     # Diagonal element
-                    row_indices.append(idx)
-                    col_indices.append(idx)
-                    data.append(-(g_e + g_w + g_n + g_s) / dx)
-                    
+                    row_indices[idx] = idx
+                    col_indices[idx] = idx
+                    data[idx] = -(g_e + g_w + g_n + g_s) / dx
+
                     # Off-diagonal elements
                     if g_w > 0:
-                        row_indices.append(idx)
-                        col_indices.append((i-1) * n + j)
-                        data.append(g_w / dx)
+                        row_indices[idx] = idx
+                        col_indices[idx] = (i-1) * n + j
+                        data[idx] = g_w / dx
                     if g_n > 0:
-                        row_indices.append(idx)
-                        col_indices.append(i * n + (j+1)%n)
-                        data.append(g_n / dx)
+                        row_indices[idx] = idx
+                        col_indices[idx] = i * n + (j+1)%n
+                        data[idx] = g_n / dx
                     if g_s > 0:
-                        row_indices.append(idx)
-                        col_indices.append(i * n + (j-1)%n)
-                        data.append(g_s / dx)
-                    
+                        row_indices[idx] = idx
+                        col_indices[idx] = i * n + (j-1)%n
+                        data[idx] = g_s / dx
+
                     # RHS contribution from external reservoir (p=1)
                     b[idx] = -g_e / dx * 1.0
                     
@@ -137,29 +250,37 @@ def _build_matrix_elements(n, g, penalty):
                         g_s = 0
                         
                     # Diagonal element
-                    row_indices.append(idx)
-                    col_indices.append(idx)
-                    data.append(-(g_e + g_w + g_n + g_s) / dx)
-                    
+                    row_indices[idx] = idx
+                    col_indices[idx] = idx
+                    data[idx] = -(g_e + g_w + g_n + g_s) / dx
+
                     # Off-diagonal elements
                     if g[i+1,j] > 0:
-                        row_indices.append(idx)
-                        col_indices.append((i+1) * n + j)
-                        data.append(g_e / dx)
+                        row_indices[idx] = idx
+                        col_indices[idx] = (i+1) * n + j
+                        data[idx] = g_e / dx
                     if g[i-1,j] > 0:
-                        row_indices.append(idx)
-                        col_indices.append((i-1) * n + j)
-                        data.append(g_w / dx)
+                        row_indices[idx] = idx
+                        col_indices[idx] = (i-1) * n + j
+                        data[idx] = g_w / dx
                     if g[i,(j+1)%n] > 0:
-                        row_indices.append(idx)
-                        col_indices.append(i * n + (j+1)%n)
-                        data.append(g_n / dx)
+                        row_indices[idx] = idx
+                        col_indices[idx] = i * n + (j+1)%n
+                        data[idx] = g_n / dx
                     if g[i,(j-1)%n] > 0:
-                        row_indices.append(idx)
-                        col_indices.append(i * n + (j-1)%n)
-                        data.append(g_s / dx)
-    
-    return np.array(row_indices), np.array(col_indices), np.array(data), b
+                        row_indices[idx] = idx
+                        col_indices[idx] = i * n + (j-1)%n
+                        data[idx] = g_s / dx
+
+                    b[idx] = 0.0  # No internal sources/sinks
+
+    # Cleaning up unused pre-allocated space
+    row_indices = row_indices[:idx+1]
+    col_indices = col_indices[:idx+1]
+    data = data[:idx+1]
+    b = b[:idx+1]
+
+    return row_indices, col_indices, data, b
 
 """
 Create the sparse matrix for the diffusion problem with non-homogeneous gap field,
@@ -168,14 +289,13 @@ properly handling zero or near-zero gap regions.
 def create_diffusion_matrix(n, g, penalty=None):
     """Create matrix using Numba-accelerated element calculation"""
     
-    # Use numba-accelerated function for heavy computation
-    row_indices, col_indices, data, b = _build_matrix_elements(n, g, 0)  # penalty not used anymore
+    row_indices, col_indices, data, b = _build_matrix_elements(n, g, 0)
     
-    # Create sparse matrix
     N = n * n
-    A = coo_matrix((data, (row_indices, col_indices)), shape=(N, N), dtype=np.float64)
-    A = A.tolil()  # Convert to lil for any remaining operations
+    from scipy.sparse import csc_matrix
     
+    A = coo_matrix((data, (row_indices, col_indices)), shape=(N, N), dtype=np.float64)
+   
     return A, b
 
 
@@ -357,33 +477,88 @@ def solve_diffusion(n, g, solver="auto"):
     mean_gap = np.mean(g)
     if mean_gap <= 0:
         raise ValueError("Invalid gap field")
+    
+    # Print memory usage in red in the terminal
+    process = psutil.Process(os.getpid())
+    print(f"\033[91m Before matrix memory usage: {process.memory_info().rss / (1024**3):.2f} GB\033[0m")
 
-    A, b = create_diffusion_matrix(n, g, None)  # No penalty needed
-    A = A.tocsr()  
+    A, b = create_diffusion_matrix(n, g, None) 
+    print(f"\033[91m Creating matrix memory usage: {process.memory_info().rss / (1024**3):.2f} GB\033[0m")
 
-    # Auto-select solver based on problem size
-    if solver == "auto":
-        if A.shape[0] < 5000:  
-            solver = "direct"
-        else:  # Large problems
-            solver = "iterative"
-        logger.info(f"Auto-selected solver: {solver}")
+    # ************************ #
+    # Solve the linear system  #
+    # ************************ #
+    # Known solvers
+    SOLVERS = ["none", "auto", "cholesky", "pardiso", "scipy.spsolve", "scipy.amg.rs", "scipy.amg.sa", "scipy", "petsc"]
+    if solver not in SOLVERS:
+        logger.warning(f"Unknown solver: {solver}, using 'cholesky' instead.")
+        solver = "cholesky"
+    if solver == "none" or solver == "auto":
+        solver = "cholesky"
+        logger.info("Auto-selecting 'cholesky' solver.")
+    
+    ####################################
+    #     DIRECT CHOLESKY SOLVER       #
+    ####################################        
+    if solver == "cholesky":
+        logger.info("Using CHOLMOD solver from scikit-sparse.")
+        A = A.tocsc()
+        from sksparse.cholmod import cholesky
+        factor = cholesky(A)
+        p = factor.solve_A(b)
+    ####################################
+    #    DIRECT MKL PARDISO SOLVER     #
+    ####################################        
+    elif solver == "pardiso": # Intel oneAPI Math Kernel Library PARDISO solver
+        logger.info("Using PARDISO solver from Intel oneAPI MKL.")
+        A = A.tocsr()
+        import pypardiso
+        pardiso_solver = pypardiso.PyPardisoSolver()
+        # Fastest configuration, see https://www.smcm.iqfr.csic.es/docs/intel/mkl/mkl_manual/ssr/ssr_pardiso_parameters.htm
+        pardiso_solver.set_iparm(1, 1)
+        # To reduce memory usage 35% less, but 20% slower
+        pardiso_solver.set_iparm(24, 1)  # Use less memory in parallel solve
+        # To further reduce memory usage by 8%, but another 15% slower, is not worth it
+        # pardiso_solver.set_iparm(2, 2)   # METIS nested dissection 
+        pardiso_solver.set_matrix_type(1)  # Real and symmetric - 1, Real, symmetric positive definite matrix - 2 (but does not work, because apparently the matrix is not positive definite)
+        # Extra parameters can be set if needed
+        # # Configure for memory efficiency #1
+        # # pardiso_solver.set_iparm(1, 0)   # Use default values
+        # # pardiso_solver.set_iparm(8, 0)   # No iterative refinement (saves memory)
+        # # pardiso_solver.set_iparm(10, 0)  # No scaling
+        # # pardiso_solver.set_iparm(11, 0)  # No scaling
+        # # pardiso_solver.set_iparm(13, 0)  # No weighted matching
+        # # pardiso_solver.set_iparm(24, 1)  # Use less memory in parallel solve
+        # # pardiso_solver.set_iparm(25, 1)   # Reduce parallel factorization memory
+        # # pardiso_solver.set_iparm(31, 0)  # no partial solve
+        # # pardiso_solver.set_iparm(36, 0)  # no Schur complement
 
-    if solver == "direct":
-        gc.collect()      
-        p = pypardiso_spsolve(A, b)
-    elif solver == "iterative":
-        M = None
+        p = pardiso_solver.solve(A, b)
+    ####################################
+    #    DIRECT SOLVER FROM SCIPY      #
+    ####################################
+    elif solver == "scipy.spsolve": # (too slow and memory consuming)
+        logger.info("Using SciPy spsolve (LU) solver.")
+        A = A.tocsc()
+        p = spsolve(A, b)
+    ##########################################
+    #   SCIPY ITERATIVE SOLVER WITH AMG PC   #
+    ##########################################
+    elif solver == "scipy.amg.rs" or solver == "scipy.amg.sa" or solver == "scipy":        
+        logger.info("Using Conjugate Gradient iterative solver.")
+        A = A.tocsr()
+
+        preconditioner = "amg.rs"
+        if solver == "scipy.amg.sa":
+            preconditioner = "amg.smooth_aggregation"
+        
         try:
-            M = get_preconditioner(A, method="amg")
-        except:
-            logger.warning("AMG preconditioner failed, using ILU instead.")
-            try:
-                M = get_preconditioner(A, method="ilu")
-            except:
-                logger.warning("ILU preconditioner failed, using no preconditioner.")
-                M = None
-
+            M = get_preconditioner(A, method=preconditioner)
+            logger.info(f"Using {preconditioner} preconditioner.")
+        except Exception as e:
+            logger.error("Failed to create AMG preconditioner. Error: " + str(e))
+            raise RuntimeError("Failed to create AMG preconditioner") from e
+        
         # Calculate relative tolerance based on gap field
         max_gap_cubed = np.max(g**3)
         if max_gap_cubed > 0:
@@ -394,14 +569,38 @@ def solve_diffusion(n, g, solver="auto"):
         p, info = cg(A, b, M=M, rtol=rtol, maxiter=6000)
                 
         if info > 0:
-            print(f"Convergence to tolerance not achieved in {info} iterations")
+            logger.warning(f"Convergence to tolerance not achieved in {info} iterations")
         elif info < 0:
-            print(f"Illegal input or breakdown: {info}")
+            logger.error(f"Illegal input or breakdown: {info}")
+    ###########################################
+    #   PETSC ITERATIVE SOLVER WITH GAMG PC   #
+    ###########################################
+    elif solver == "petsc":
+        logger.info("Using PETSc KSP iterative solver with HYPRE preconditioner.")
+        from petsc4py import PETSc
+        A = A.tocsr()
+        A_p = PETSc.Mat().createAIJ(size=A.shape, csr=(A.indptr, A.indices, A.data))
+        ksp = PETSc.KSP().create()
+        ksp.setOperators(A_p)
+        ksp.setType('cg')
+        pc = ksp.getPC()
+        # pc.setType('gamg')     
+        pc.setType('hypre')
+        # pc.setHYPREType('boomeramg')
+        ksp.setTolerances(rtol=1e-8)
+        ksp.setFromOptions()
+        b_p = PETSc.Vec().createWithArray(b); x_p = b_p.duplicate()
+        ksp.solve(b_p, x_p); p = x_p.getArray()
+
+    gc.collect()
         
     return p.reshape((n, n))
 
 def solve_fluid_problem(gaps, solver):
     logger.info("Starting fluid solver.")
+    process = psutil.Process(os.getpid())
+    logger.info(f"<*>=<*>=<*> Initial memory usage: {process.memory_info().rss / (1024**3):.2f} GB")
+
     n = gaps.shape[0]
     if n == 0:
         logger.error("Empty gap field.")
@@ -441,6 +640,8 @@ def solve_fluid_problem(gaps, solver):
     if selected_color == -1:
         logger.info("No percolation detected.")
         return None, None, None
+    
+    print(f"\033[91m After labeling memory usage: {process.memory_info().rss / (1024**3):.2f} GB\033[0m")
 
     # To get rid of lakes surrounded by contact (trapped fluid)
     gaps_original = gaps * (labels == selected_color)
@@ -459,6 +660,9 @@ def solve_fluid_problem(gaps, solver):
         logger.error("Error in fluid solver: ", e)
         return None, None, None
 
+    # Print memory usage in red in the terminal
+    print(f"\033[91m Solving diffusion memory usage: {process.memory_info().rss / (1024**3):.2f} GB\033[0m")
+
     logger.info("Fluid solver finished.")
     logger.info("Calculating flux with simple boundary condition approach.")
 
@@ -468,29 +672,45 @@ def solve_fluid_problem(gaps, solver):
 
     # Use numba-accelerated flux calculation with ORIGINAL gaps
     flux = _calculate_flux_numba(n, gaps_original, dpdx, dpdy)
-    filtered_flux = _filter_flux_numba(n, gaps_original, flux)
+    # filtered_flux = _filter_flux_numba(n, gaps_original, flux)
     
     logger.info("finished.")
 
-    return gaps_original, p, filtered_flux
+    return gaps_original, p, flux
+    # return gaps_original, p, filtered_flux
 
-def get_preconditioner(A, method="amg"):
-    if method == "amg":
+def get_preconditioner(A, method = "amg.rs"):
+    if method == "amg.smooth_aggregation":
+        import pyamg
+        from scipy.sparse.linalg import LinearOperator
+
         try:
-            ml = smoothed_aggregation_solver(A, max_coarse=A.shape[0] // 1000)
-            return ml.aspreconditioner(cycle="V")
+            logger.info("Using Smoothed Aggregation AMG preconditioner.")
+            ml = pyamg.smoothed_aggregation_solver(A, max_coarse=A.shape[0] //1000) # Maybe it could be further optimized
+
+            M = ml.aspreconditioner(cycle='V')
+            # M = LinearOperator(A.shape, matvec=lambda v: ml.solve(v, tol=1e-2, maxiter=1)) # alternative
+            return M
         except:
-            logger.warning("AMG failed, falling back to ILU")
-            method = "ilu"
-    
-    if method == "ilu":
+            logger.warning("AMG.Smooth_Aggregation failed, try AMG.RS")
+            method = "amg.rs"
+
+    if method == "amg.rs":
+        import pyamg
+        from scipy.sparse.linalg import LinearOperator
+
+        logger.info("Using Ruge-Stuben AMG preconditioner.")
         try:
-            ilu = spilu(A.tocsc(), drop_tol=1e-5)
-            return LinearOperator(A.shape, ilu.solve)
+            ml = pyamg.ruge_stuben_solver(A, max_coarse=A.shape[0] // 1000,CF='RS')
+            M = LinearOperator(A.shape, matvec=lambda v: ml.solve(v, tol=1e-2, maxiter=1))
+            # M = ml.aspreconditioner(cycle='V') # alternative
+            return M
         except:
-            logger.warning("ILU failed, using no preconditioner")
-            return None
-    
+            logger.warning("AMG.RS failed, falling back to ILU")
+            raise RuntimeError("AMG.RS failed")
+    else:
+        logger.warning(f"Unknown preconditioner method: {method}")
+        raise ValueError(f"Unknown preconditioner method: {method}")
     return None
 
 # Total flux calculation

@@ -3,4 +3,5 @@ scipy
 numba
 pyamg
 pypardiso
+petsc4py
 matplotlib

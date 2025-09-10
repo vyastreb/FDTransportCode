@@ -12,29 +12,15 @@ License: BSD 3-Clause
 
 import numpy as np
 from scipy.ndimage import label
-from scipy.sparse import lil_matrix, coo_matrix
-from numba import jit, prange, njit
-## For iterative solver if needed
-from scipy.sparse.linalg import LinearOperator, cg
-# Eventually
-#  from scipy.sparse.linalg import gmres, bicgstab, spsolve
-
-# Intel oneAPI Math Kernel Library PARDISO solver
-# import pypardiso #import spsolve as pypardiso_spsolve
-
-
-from scipy.sparse.linalg import spsolve
-
+from scipy.sparse import coo_matrix
+from numba import jit, njit
 import time
 import logging
 import gc
 
-import psutil
-import os
-
 # If need control over number of threads
-# os.environ['MKL_NUM_THREADS'] = '2'
-# os.environ['OMP_NUM_THREADS'] = '2'
+# os.environ['MKL_NUM_THREADS'] = '4'
+# os.environ['OMP_NUM_THREADS'] = '4'
 
 logger = logging.getLogger(__name__)
 
@@ -478,12 +464,7 @@ def solve_diffusion(n, g, solver="auto"):
     if mean_gap <= 0:
         raise ValueError("Invalid gap field")
     
-    # Print memory usage in red in the terminal
-    process = psutil.Process(os.getpid())
-    print(f"\033[91m Before matrix memory usage: {process.memory_info().rss / (1024**3):.2f} GB\033[0m")
-
     A, b = create_diffusion_matrix(n, g, None) 
-    print(f"\033[91m Creating matrix memory usage: {process.memory_info().rss / (1024**3):.2f} GB\033[0m")
 
     # ************************ #
     # Solve the linear system  #
@@ -538,6 +519,7 @@ def solve_diffusion(n, g, solver="auto"):
     #    DIRECT SOLVER FROM SCIPY      #
     ####################################
     elif solver == "scipy.spsolve": # (too slow and memory consuming)
+        from scipy.sparse.linalg import spsolve
         logger.info("Using SciPy spsolve (LU) solver.")
         A = A.tocsc()
         p = spsolve(A, b)
@@ -592,14 +574,12 @@ def solve_diffusion(n, g, solver="auto"):
         b_p = PETSc.Vec().createWithArray(b); x_p = b_p.duplicate()
         ksp.solve(b_p, x_p); p = x_p.getArray()
 
-    gc.collect()
+    # gc.collect()
         
     return p.reshape((n, n))
 
 def solve_fluid_problem(gaps, solver):
     logger.info("Starting fluid solver.")
-    process = psutil.Process(os.getpid())
-    logger.info(f"<*>=<*>=<*> Initial memory usage: {process.memory_info().rss / (1024**3):.2f} GB")
 
     n = gaps.shape[0]
     if n == 0:
@@ -641,7 +621,6 @@ def solve_fluid_problem(gaps, solver):
         logger.info("No percolation detected.")
         return None, None, None
     
-    print(f"\033[91m After labeling memory usage: {process.memory_info().rss / (1024**3):.2f} GB\033[0m")
 
     # To get rid of lakes surrounded by contact (trapped fluid)
     gaps_original = gaps * (labels == selected_color)
@@ -659,9 +638,6 @@ def solve_fluid_problem(gaps, solver):
     except Exception as e:
         logger.error("Error in fluid solver: ", e)
         return None, None, None
-
-    # Print memory usage in red in the terminal
-    print(f"\033[91m Solving diffusion memory usage: {process.memory_info().rss / (1024**3):.2f} GB\033[0m")
 
     logger.info("Fluid solver finished.")
     logger.info("Calculating flux with simple boundary condition approach.")

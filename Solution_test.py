@@ -22,7 +22,6 @@ FS.set_verbosity('info')
 # FS.set_verbosity('warning')
 
 # Plotting function
-# Plotting function
 def plot_fields(g, pressure, flux, suffix="", VectorField=False, plot_n_vectors = 50):
     # 
     X, Y = np.meshgrid(np.linspace(0, 1, g.shape[0]), np.linspace(0, 1, g.shape[1]))
@@ -31,15 +30,15 @@ def plot_fields(g, pressure, flux, suffix="", VectorField=False, plot_n_vectors 
     gg = g.copy()
     gg[gg<=0] = np.nan
 
-    # # Plot gap function
-    # fig, ax = plt.subplots(figsize=(10, 8))
-    # cax = ax.imshow(gg, cmap='viridis', origin='lower', extent=[0, 1, 0, 1], interpolation="none")
-    # fig.colorbar(cax, label='Gap')
-    # ax.set_title('Gap Function')
-    # ax.set_xlabel('X')
-    # ax.set_ylabel('Y')
-    # plt.show()
-    # fig.savefig(f"FS_gap_{suffix}.png",dpi=300)
+    # Plot gap function
+    fig, ax = plt.subplots(figsize=(10, 8))
+    cax = ax.imshow(gg, cmap='viridis', origin='lower', extent=[0, 1, 0, 1], interpolation="none")
+    fig.colorbar(cax, label='Gap')
+    ax.set_title('Gap Function')
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    plt.show()
+    fig.savefig(f"FS_gap_{suffix}.png",dpi=300)
 
     # Pressure plot
     pressure[np.isnan(gg)] = np.nan
@@ -83,7 +82,7 @@ def plot_fields(g, pressure, flux, suffix="", VectorField=False, plot_n_vectors 
 ############################################
 
 def main():
-    N0 = 8000           # Size of the random field
+    N0 = 1000           # Size of the random field
     """
         Available solvers:
         + "scipy.amg.rs" - optimal for memory

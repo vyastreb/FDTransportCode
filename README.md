@@ -73,7 +73,7 @@ The fluid flow solver supports several linear system solvers and preconditioners
 
 ## Performance
 
-Performance of the code on a truncated rough contact is shown below.
+Performance of the code on a truncated rough surface is shown below. The peak memory consumption and the CPU time required to perform connectivity analysis, constructing the matrix and solving the linear system are provided. The real number of DOFs is reported which corresponds to approximately 84% of the square grid $N\times N$ for $N\in\{500,1\,000,2\,000,4\,000,6\,000,8\,000\}$.
 
 ![CPU and RAM performance of the solver](CPU_RAM_performance.png)
 

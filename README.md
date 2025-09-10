@@ -23,7 +23,7 @@ $$ -->
 + It dilates non-zero gap field to properly handle impenetrability of channels, it allows not to erode the domain for flux calculation.
 + It applies an inlet pressure $p_i=1$  on one side $x=0$ and an outlet pressure $p_0=0$ on the opposite side $x=1$ and uses periodic boundary conditions on the lateral sides $y=\{0,1\}$.
 + It constructs a sparse matrix with conductivity proportional to $g^3$.
-+ The linear system of equations is solved by a direct (`pardiso_spsolve`) or an iterative solver (CG with AMG preconditioner).
++ Different solvers (direct and iterative with appropriate preconditioners) are selected and tuned to solve efficiently the resulting linear system of equations.
 + Total flux is properly computed.
 
 ## Usage

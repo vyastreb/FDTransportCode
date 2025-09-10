@@ -11,7 +11,8 @@ License: BSD 3-Clause
 # TODO: adapt for compressible fluids (requires only postprocessing)
 
 import numpy as np
-from scipy.ndimage import label
+from skimage.measure import label
+# from scipy.ndimage import label
 from scipy.sparse import coo_matrix
 from numba import jit, njit
 import time
@@ -578,24 +579,48 @@ def solve_diffusion(n, g, solver="auto"):
         
     return p.reshape((n, n))
 
-def solve_fluid_problem(gaps, solver):
-    logger.info("Starting fluid solver.")
-
+def connectivity_analysis(gaps):
+    binary = gaps > 0
     n = gaps.shape[0]
-    if n == 0:
-        logger.error("Empty gap field.")
-        return None, None, None
+    labels = label(binary, connectivity=1)  # 4-connectivity is faster
+    
+    # Step 3: Efficient periodic boundary conditions
+    left_boundary = labels[:, 0]
+    right_boundary = labels[:, -1]
+    
+    # Create label mapping for merging
+    merge_map = {}
+    for i in range(n):
+        left_label = left_boundary[i]
+        right_label = right_boundary[i] 
+        if left_label > 0 and right_label > 0 and left_label != right_label:
+            merge_map[right_label] = left_label
+    
+    # Apply merging (single pass)
+    if merge_map:
+        for old_label, new_label in merge_map.items():
+            labels[labels == old_label] = new_label
+    
+    # Step 4: Fast percolation check using sets
+    top_labels = set(labels[0, :]) - {0}
+    bottom_labels = set(labels[-1, :]) - {0}
+    
+    percolating_labels = top_labels & bottom_labels
+    
+    if percolating_labels:
+        selected_color = next(iter(percolating_labels))
+        logger.info(f"Percolation detected with label {selected_color}")
+        gaps_original = gaps * (labels == selected_color)
+        return gaps_original
+    else:
+        logger.info("No percolation detected.")
+        return None
 
-    x = np.linspace(0, 1, n)
-    X, Y = np.meshgrid(x, x)
-
-    logger.info("Checking connectivity.")
-    # construct connectivity matrix - use accelerated threshold
-    binary = threshold(gaps, 0)
-
+def connectivity_analysis_old(gaps):
+    binary = gaps > 0
     # Select separate regions
-    labels, numL = label(binary)    
-
+    labels, numL = label(binary)
+    n = gaps.shape[0]
     # Make labels periodic
     for i in range(n):
         if labels[i,0] > 0:
@@ -624,6 +649,31 @@ def solve_fluid_problem(gaps, solver):
 
     # To get rid of lakes surrounded by contact (trapped fluid)
     gaps_original = gaps * (labels == selected_color)
+    return gaps_original
+
+def solve_fluid_problem(gaps, solver):
+    logger.info("Starting fluid solver.")
+
+    n = gaps.shape[0]
+    if n == 0:
+        logger.error("Empty gap field.")
+        return None, None, None
+
+    x = np.linspace(0, 1, n)
+    X, Y = np.meshgrid(x, x)
+
+    logger.info("Checking connectivity.")
+    # construct connectivity matrix - use accelerated threshold
+    # binary = threshold(gaps, 0)
+
+    start = time.time()
+    gaps_original = connectivity_analysis(gaps)
+    logger.info("Connectivity analysis: CPU time  = {1:.3f} sec".format(n, time.time() - start))
+
+    # import matplotlib.pyplot as plt
+    # plt.imshow(gaps_original, cmap='gray')
+    # plt.show()
+    # exit(1)
     
     # Apply dilation before solving to preserve boundary data
     logger.info("Applying dilation to preserve boundary channels.")

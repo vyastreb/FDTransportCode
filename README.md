@@ -53,7 +53,7 @@ gaps = (np.sqrt((X - 0.5)**2 + (Y - 0.5)**2) > 0.2).astype(float)
 _, _, flux = FS.solve_fluid_problem(gaps, "auto")
 if flux is not None: plt.imshow(np.sqrt(flux[:,:,0]**2 + flux[:,:,1]**2), origin='lower', cmap='jet'); plt.show()
 ```
-4. Try a more advanced tests `Evolution_test.py` and `Solution_test.py`.
+4. Try more advanced tests `Evolution_test.py` and `Solution_test.py`.
 
 ## Available Solvers and Preconditioners
 
@@ -75,7 +75,7 @@ The fluid flow solver supports several linear system solvers and preconditioners
 
 Performance of the code on a truncated rough surface is shown below. The peak memory consumption and the CPU time required to perform connectivity analysis, constructing the matrix and solving the linear system are provided. The real number of DOFs is reported which corresponds to approximately 84% of the square grid $N\times N$ for $N\in\{500,1\,000,2\,000,4\,000,6\,000,8\,000\}$.
 
-![CPU and RAM performance of the solver](CPU_RAM_performance.png)
+![CPU and RAM performance of the solver](CPU_RAM_real_dof_performance.png)
 
 
 ## Illustration

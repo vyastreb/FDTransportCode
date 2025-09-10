@@ -63,26 +63,27 @@ def plot_fields(g, pressure, flux, suffix="", VectorField=False, plot_n_vectors 
     Vmax = np.nanmax(np.log10(norm_flux))
     Vmin += 0.8*abs(Vmax-Vmin)
     Vmax -= 0.*abs(Vmax-Vmin)
-    # cax = ax.imshow(np.log10(norm_flux), cmap='jet', origin='lower', extent=[0, 1, 0, 1], vmin=Vmin, vmax=Vmax, interpolation="none")
-    cax = ax.imshow(norm_flux, cmap='jet', origin='lower', extent=[0, 1, 0, 1], interpolation="none")
-    if VectorField:
-        every = N0 // plot_n_vectors
-        ax.quiver(X[::every, ::every], Y[::every, ::every], 
-                flux[::every, ::every, 0], flux[::every, ::every, 1],
-                color='red', scale=None, width=0.002)    
-    fig.colorbar(cax, label='Log10(Flux Magnitude)')
-    ax.set_title('Flux Distribution')
-    ax.set_xlabel('X')
-    ax.set_ylabel('Y')
+    cax = ax.imshow(np.log10(norm_flux), cmap='nipy_spectral', origin='lower', extent=[0, 1, 0, 1], vmin=Vmin, vmax=Vmax, interpolation="kaiser")
+    # Remove axes, box, ticks, labels, and tick text
+    ax.set_axis_off()
+    fig.subplots_adjust(left=0, right=1, top=1, bottom=0)
+    # Optionally, remove the colorbar label and ticks as well
+    # cb = fig.colorbar(cax)
+    # cb.ax.set_axis_off()
+    # If you want to keep the colorbar but remove its ticks and label, use:
+    # cb = fig.colorbar(cax)
+    # cb.set_ticks([])
+    # cb.set_label("")
+    # cb.ax.tick_params(left=False, right=False, labelleft=False, labelright=False)
     plt.show()
-    fig.savefig(f"FS_flux__n_{N0}_{suffix}.png", dpi=300)
+    fig.savefig(f"FS_flux__n_{N0}_{suffix}.png", dpi=800, bbox_inches='tight', pad_inches=0)
     
 ############################################
 #                     MAIN                 #
 ############################################
 
 def main():
-    N0 = 1000           # Size of the random field
+    N0 = 4000           # Size of the random field
     """
         Available solvers:
         + "scipy.amg.rs" - optimal for memory
@@ -90,11 +91,11 @@ def main():
         + "petsc"        - very fast and memory efficient, 4x scipy.amg.rs and only 20% more memory
     """
     solver = "petsc"
-    k_low =   4 / N0   # Lower cutoff of the power spectrum
-    k_high = 32 / N0   # Upper cutoff of the power spectrum
-    Hurst = 0.75         # Hurst exponent
+    k_low =   8 / N0   # Lower cutoff of the power spectrum
+    k_high = 1000 / N0   # Upper cutoff of the power spectrum
+    Hurst = 0.5         # Hurst exponent
     dim = 2             # Dimension of the random field
-    seed = 12345        # Seed for the random number generator
+    seed = 23349        # Seed for the random number generator
     plateau = True      # Use plateau in the power spectrum
     np.random.seed(seed)
 
@@ -109,7 +110,7 @@ def main():
     #           Compute and PLOT ALL                #
     #################################################
 
-    delta = 0.4
+    delta = 0.3
     g = random_field + delta
     g[g < 0] = 0
 

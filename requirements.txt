@@ -5,3 +5,4 @@ pyamg
 pypardiso
 petsc4py
 matplotlib
+scikit-image

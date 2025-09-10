@@ -9,8 +9,6 @@ License: BSD 3-Clause
 
 import numpy as np
 import matplotlib.pyplot as plt
-from numpy.fft import ifft2, fftfreq, fftshift, ifftshift, fftn, ifftn
-import time
 
 import Transport_code_accelerated as FS
 import RandomField as rf # https://github.com/vyastreb/SelfAffineSurfaceGenerator
@@ -23,7 +21,7 @@ FS.set_verbosity('error')
 def main():
     # Construct random self-affine surface
     N0 = 256           # Size of the random field
-    solver = "direct"   # "direct" or "iterative" Solver to use for the diffusion problem
+    solver = "petsc"   # or "cholesky" or "scipy.amg.rs"
     k_low =   4 / N0   # Lower cutoff of the power spectrum
     k_high = 32 / N0   # Upper cutoff of the power spectrum
     Hurst = 0.75         # Hurst exponent

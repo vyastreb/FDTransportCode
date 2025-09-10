@@ -55,11 +55,34 @@ if flux is not None: plt.imshow(np.sqrt(flux[:,:,0]**2 + flux[:,:,1]**2), origin
 ```
 4. Try a more advanced tests `Evolution_test.py` and `Solution_test.py`.
 
+## Available Solvers and Preconditioners
+
+The fluid flow solver supports several linear system solvers and preconditioners for efficient and robust solution of large sparse systems:
+
+**Direct Solvers:**
+- 🥇**Cholesky (`cholesky`)**: Uses CHOLMOD via scikit-sparse. Fastest for moderate system sizes if enough memory is available.
+- **PARDISO (`pardiso`)**: Intel MKL PARDISO direct solver, efficient for large symmetric systems (memory optimized low-level parameters are used).
+- **SciPy LU (`scipy.spsolve`)**: Standard LU decomposition from SciPy (not recommended for large problems: too slow and consumes a lot of memory).
+
+**Iterative Solvers:**
+- 🏆 **PETSc CG with HYPRE Preconditioner (`petsc`)**: Uses PETSc's CG solver with HYPRE preconditioning for high performance and scalability - this is the fastest solver.
+- **Conjugate Gradient with AMG Preconditioner (`scipy.amg.rs`, `scipy.amg.sa`, `scipy`)**: Uses PyAMG's Ruge-Stuben or Smoothed Aggregation algebraic multigrid as a preconditioner for the conjugate gradient method - 🥈 **`scipy.amg.rs`** is one of the best in terms of performance choices, the most memory efficient.
+
+**Rules of thumb:** If `auto` is specified, `cholesky` solver is used. For memory-limited cases, use `scipy.amg.rs`. For speed, use `petsc`.
+
+
 ## Performance
 
-Performance of the code on a single circular inclusion problem, inclusion radius is $r = 0.2/L$.
+Performance of the code on a truncated rough contact is shown below.
 
 ![CPU and RAM performance of the solver](CPU_RAM_performance.png)
+
+
+## Illustration
+
+An example of a fluid flow simulation, solved on the grid $n\times n = 8\,000 \times 8\,000$ which features a truncated self-affine rough surface with a rich spectrum. Solution time on my laptop with `petsc` is only 97 seconds and the peak memory consumption is 25.8 GB.
+
+![Solution for 64 million grid points](illustration.jpg)
 
 ## Info
 

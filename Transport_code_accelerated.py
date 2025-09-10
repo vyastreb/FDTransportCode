@@ -12,7 +12,6 @@ License: BSD 3-Clause
 
 import numpy as np
 from skimage.measure import label
-# from scipy.ndimage import label
 from scipy.sparse import coo_matrix
 from numba import jit, njit
 import time
@@ -52,10 +51,11 @@ def face_k(a, b):
 
 @njit   
 def _build_matrix_elements(n, g, penalty=0.0):
+    """Numba-accelerated matrix element calculation with external reservoir BCs"""
     dx = 1.0 / (n - 1)
     N = n * n
 
-    # Max 5 nonzeros per row
+    # Max 5 nonzeros per row (5-diagonal matrix)
     row_indices = np.empty(5 * N, dtype=np.int32)
     col_indices = np.empty(5 * N, dtype=np.int32)
     data = np.empty(5 * N, dtype=np.float64)
@@ -141,141 +141,12 @@ def _build_matrix_elements(n, g, penalty=0.0):
     return row_indices, col_indices, data, b
 
 
-@njit
-def _build_matrix_elements_old(n, g, penalty):
-    """Numba-accelerated matrix element calculation with external reservoir BCs"""
-    dx = 1.0 / (n - 1)
-    N = n * n
-    
-    # Pre-allocate arrays for matrix construction
-    row_indices = np.zeros(5 * N, dtype=np.int32)  # Max 5 non-zeros per row
-    col_indices = np.zeros(5 * N, dtype=np.int32)
-    data = np.zeros(5 * N, dtype=np.float64)
-    b = np.zeros(N)
-    
-    for i in range(n):
-        for j in range(n):
-            idx = i * n + j
-            
-            if g[i,j] == 0:  # Blocked cells
-                row_indices[idx] = idx
-                col_indices[idx] = idx
-                data[idx] = 1.0
-                b[idx] = 0
-            else:  # Open cells (including boundaries)
-                if i == 0:  # Left boundary - external reservoir at p=0
-                    # Calculate conductivities
-                    g_e = 0.5 * (g[i,j]**3 + g[i+1,j]**3) if i+1 < n and g[i+1,j] > 0 else 0
-                    g_w = g[i,j]**3  # Connection to external reservoir at p=0
-                    g_n = 0.5 * (g[i,j]**3 + g[i,(j+1)%n]**3) if g[i,(j+1)%n] > 0 else 0
-                    g_s = 0.5 * (g[i,j]**3 + g[i,(j-1)%n]**3) if g[i,(j-1)%n] > 0 else 0
-                    
-                    # Diagonal element
-                    row_indices[idx] = idx
-                    col_indices[idx] = idx
-                    data[idx] = -(g_e + g_w + g_n + g_s) / dx
 
-                    # Off-diagonal elements
-                    if g_e > 0:
-                        row_indices[idx] = idx
-                        col_indices[idx] = (i+1) * n + j
-                        data[idx] = g_e / dx
-                    if g_n > 0:
-                        row_indices[idx] = idx
-                        col_indices[idx] = i * n + (j+1)%n
-                        data[idx] = g_n / dx
-                    if g_s > 0:
-                        row_indices[idx] = idx
-                        col_indices[idx] = i * n + (j-1)%n
-                        data[idx] = g_s / dx
-                    
-                    # RHS contribution from external reservoir (p=0)
-                    b[idx] = -g_w / dx * 0.0  # = 0, but keeping for clarity
-                    
-                elif i == n-1:  # Right boundary - external reservoir at p=1
-                    # Calculate conductivities
-                    g_e = g[i,j]**3  # Connection to external reservoir at p=1
-                    g_w = 0.5 * (g[i,j]**3 + g[i-1,j]**3) if i-1 >= 0 and g[i-1,j] > 0 else 0
-                    g_n = 0.5 * (g[i,j]**3 + g[i,(j+1)%n]**3) if g[i,(j+1)%n] > 0 else 0
-                    g_s = 0.5 * (g[i,j]**3 + g[i,(j-1)%n]**3) if g[i,(j-1)%n] > 0 else 0
-                    
-                    # Diagonal element
-                    row_indices[idx] = idx
-                    col_indices[idx] = idx
-                    data[idx] = -(g_e + g_w + g_n + g_s) / dx
 
-                    # Off-diagonal elements
-                    if g_w > 0:
-                        row_indices[idx] = idx
-                        col_indices[idx] = (i-1) * n + j
-                        data[idx] = g_w / dx
-                    if g_n > 0:
-                        row_indices[idx] = idx
-                        col_indices[idx] = i * n + (j+1)%n
-                        data[idx] = g_n / dx
-                    if g_s > 0:
-                        row_indices[idx] = idx
-                        col_indices[idx] = i * n + (j-1)%n
-                        data[idx] = g_s / dx
-
-                    # RHS contribution from external reservoir (p=1)
-                    b[idx] = -g_e / dx * 1.0
-                    
-                else:  # Interior points
-                    g_e = 0.5 * (g[i,j]**3 + g[i+1,j]**3)
-                    g_w = 0.5 * (g[i,j]**3 + g[i-1,j]**3)
-                    g_n = 0.5 * (g[i,j]**3 + g[i,(j+1)%n]**3)
-                    g_s = 0.5 * (g[i,j]**3 + g[i,(j-1)%n]**3)
-                    
-                    if g[i+1,j] == 0:
-                        g_e = 0
-                    if g[i-1,j] == 0:
-                        g_w = 0
-                    if g[i,(j+1)%n] == 0:
-                        g_n = 0
-                    if g[i,(j-1)%n] == 0:
-                        g_s = 0
-                        
-                    # Diagonal element
-                    row_indices[idx] = idx
-                    col_indices[idx] = idx
-                    data[idx] = -(g_e + g_w + g_n + g_s) / dx
-
-                    # Off-diagonal elements
-                    if g[i+1,j] > 0:
-                        row_indices[idx] = idx
-                        col_indices[idx] = (i+1) * n + j
-                        data[idx] = g_e / dx
-                    if g[i-1,j] > 0:
-                        row_indices[idx] = idx
-                        col_indices[idx] = (i-1) * n + j
-                        data[idx] = g_w / dx
-                    if g[i,(j+1)%n] > 0:
-                        row_indices[idx] = idx
-                        col_indices[idx] = i * n + (j+1)%n
-                        data[idx] = g_n / dx
-                    if g[i,(j-1)%n] > 0:
-                        row_indices[idx] = idx
-                        col_indices[idx] = i * n + (j-1)%n
-                        data[idx] = g_s / dx
-
-                    b[idx] = 0.0  # No internal sources/sinks
-
-    # Cleaning up unused pre-allocated space
-    row_indices = row_indices[:idx+1]
-    col_indices = col_indices[:idx+1]
-    data = data[:idx+1]
-    b = b[:idx+1]
-
-    return row_indices, col_indices, data, b
-
-"""
-Create the sparse matrix for the diffusion problem with non-homogeneous gap field,
-properly handling zero or near-zero gap regions.
-"""
 def create_diffusion_matrix(n, g, penalty=None):
-    """Create matrix using Numba-accelerated element calculation"""
-    
+    """
+    Create the sparse matrix for the diffusion problem with non-homogeneous gap field, properly handling zero or near-zero gap regions.
+    """    
     row_indices, col_indices, data, b = _build_matrix_elements(n, g, 0)
     
     N = n * n
@@ -284,7 +155,6 @@ def create_diffusion_matrix(n, g, penalty=None):
     A = coo_matrix((data, (row_indices, col_indices)), shape=(N, N), dtype=np.float64)
    
     return A, b
-
 
 @jit(nopython=True)
 def _calculate_gradients_simple_bc(n, p, dx, gaps):
@@ -584,7 +454,7 @@ def connectivity_analysis(gaps):
     n = gaps.shape[0]
     labels = label(binary, connectivity=1)  # 4-connectivity is faster
     
-    # Step 3: Efficient periodic boundary conditions
+    # Efficient periodic boundary conditions
     left_boundary = labels[:, 0]
     right_boundary = labels[:, -1]
     
@@ -601,7 +471,7 @@ def connectivity_analysis(gaps):
         for old_label, new_label in merge_map.items():
             labels[labels == old_label] = new_label
     
-    # Step 4: Fast percolation check using sets
+    # Fast percolation check using sets
     top_labels = set(labels[0, :]) - {0}
     bottom_labels = set(labels[-1, :]) - {0}
     
@@ -616,41 +486,6 @@ def connectivity_analysis(gaps):
         logger.info("No percolation detected.")
         return None
 
-def connectivity_analysis_old(gaps):
-    binary = gaps > 0
-    # Select separate regions
-    labels, numL = label(binary)
-    n = gaps.shape[0]
-    # Make labels periodic
-    for i in range(n):
-        if labels[i,0] > 0:
-            color = labels[i,0]
-            opposite = labels[i,-1]
-            if opposite > 0:
-                labels[labels == opposite] = color
-
-    # Check if there is a percolation
-    left_side = labels[0,:]
-    right_side = labels[-1,:]
-    unique_left_side = np.unique(left_side)
-    unique_right_side = np.unique(right_side)
-    selected_color = -1
-
-    for i in unique_left_side:
-        if i != 0:
-            for j in unique_right_side:
-                if j != 0 and i == j:
-                    selected_color = i
-                    break
-    if selected_color == -1:
-        logger.info("No percolation detected.")
-        return None, None, None
-    
-
-    # To get rid of lakes surrounded by contact (trapped fluid)
-    gaps_original = gaps * (labels == selected_color)
-    return gaps_original
-
 def solve_fluid_problem(gaps, solver):
     logger.info("Starting fluid solver.")
 
@@ -663,17 +498,11 @@ def solve_fluid_problem(gaps, solver):
     X, Y = np.meshgrid(x, x)
 
     logger.info("Checking connectivity.")
-    # construct connectivity matrix - use accelerated threshold
-    # binary = threshold(gaps, 0)
 
     start = time.time()
     gaps_original = connectivity_analysis(gaps)
     logger.info("Connectivity analysis: CPU time  = {1:.3f} sec".format(n, time.time() - start))
 
-    # import matplotlib.pyplot as plt
-    # plt.imshow(gaps_original, cmap='gray')
-    # plt.show()
-    # exit(1)
     
     # Apply dilation before solving to preserve boundary data
     logger.info("Applying dilation to preserve boundary channels.")

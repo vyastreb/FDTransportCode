@@ -83,16 +83,16 @@ def plot_fields(g, pressure, flux, suffix="", VectorField=False, plot_n_vectors 
 ############################################
 
 def main():
-    N0 = 4000           # Size of the random field
+    N0 = 512           # Size of the random field
     """
         Available solvers:
         + "scipy.amg.rs" - optimal for memory
         + "cholesky"     - optimal for speed (if enough memory), only 10% more than petsc
         + "petsc"        - very fast and memory efficient, 4x scipy.amg.rs and only 20% more memory
     """
-    solver = "petsc"
+    solver = "petsc.mumps"
     k_low =   8 / N0   # Lower cutoff of the power spectrum
-    k_high = 1000 / N0   # Upper cutoff of the power spectrum
+    k_high = 20 / N0   # Upper cutoff of the power spectrum
     Hurst = 0.5         # Hurst exponent
     dim = 2             # Dimension of the random field
     seed = 23349        # Seed for the random number generator

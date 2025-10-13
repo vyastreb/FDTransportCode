@@ -341,7 +341,7 @@ def solve_diffusion(n, g, solver="auto"):
     # Solve the linear system  #
     # ************************ #
     # Known solvers
-    SOLVERS = ["none", "auto", "cholesky", "pardiso", "scipy.spsolve", "scipy.amg.rs", "scipy.amg.sa", "scipy", "petsc"]
+    SOLVERS = ["none", "auto", "cholesky", "pardiso", "scipy.spsolve", "scipy.amg.rs", "scipy.amg.sa", "scipy", "petsc", "petsc.mumps"]
     if solver not in SOLVERS:
         logger.warning(f"Unknown solver: {solver}, using 'cholesky' instead.")
         solver = "cholesky"
@@ -435,6 +435,7 @@ def solve_diffusion(n, g, solver="auto"):
         A_p = PETSc.Mat().createAIJ(size=A.shape, csr=(A.indptr, A.indices, A.data))
         ksp = PETSc.KSP().create()
         ksp.setOperators(A_p)
+        # TODO: can further try different PETSc solvers (the choice is huge: https://petsc.org/release/petsc4py/reference/petsc4py.PETSc.KSP.Type.html
         ksp.setType('cg')
         pc = ksp.getPC()
         # pc.setType('gamg')     
@@ -442,8 +443,29 @@ def solve_diffusion(n, g, solver="auto"):
         # pc.setHYPREType('boomeramg')
         ksp.setTolerances(rtol=1e-8)
         ksp.setFromOptions()
+        b_p = PETSc.Vec().createWithArray(b)
+        x_p = b_p.duplicate()
+        ksp.solve(b_p, x_p)
+        p = x_p.getArray()
+    elif solver == "petsc.mumps":
+        logger.info("Using PETSc MUMPS direct solver.")
+        from petsc4py import PETSc
+        A = A.tocsr()
+        A_p = PETSc.Mat().createAIJ(size=A.shape, csr=(A.indptr, A.indices, A.data))
         b_p = PETSc.Vec().createWithArray(b); x_p = b_p.duplicate()
-        ksp.solve(b_p, x_p); p = x_p.getArray()
+        x_p = b_p.duplicate()
+
+        ksp = PETSc.KSP().create()
+        ksp.setOperators(A_p)
+        ksp.setType('preonly')
+        pc = ksp.getPC()
+        pc.setType('lu')
+        pc.setFactorSolverType('mumps')
+
+        # PETSc.Options()['mat_mumps_icntl_4'] = 2
+        ksp.setFromOptions()
+        ksp.solve(b_p, x_p)
+        p = x_p.getArray()
 
     # gc.collect()
         

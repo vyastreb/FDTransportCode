@@ -60,20 +60,20 @@ if flux is not None: plt.imshow(np.sqrt(flux[:,:,0]**2 + flux[:,:,1]**2), origin
 The fluid flow solver supports several linear system solvers and preconditioners for efficient and robust solution of large sparse systems:
 
 **Direct Solvers:**
-- 🥇**Cholesky (`cholesky`)**: Uses CHOLMOD via scikit-sparse. Fastest for moderate system sizes if enough memory is available.
-- **PARDISO (`pardiso`)**: Intel MKL PARDISO direct solver, efficient for large symmetric systems (memory optimized low-level parameters are used).
+- 🏆 **Cholesky (`cholesky`)**: Uses CHOLMOD via scikit-sparse. Fastest among all tested solvers and very memory efficient.
+- **PARDISO (`pardiso`)**: Intel MKL PARDISO direct solver, worse in memory and slower than leaders, suboptimal.
 - **SciPy LU (`scipy.spsolve`)**: Standard LU decomposition from SciPy (not recommended for large problems: too slow and consumes a lot of memory).
 
 **Iterative Solvers:**
-- 🏆 **PETSc CG with HYPRE Preconditioner (`petsc`)**: Uses PETSc's CG solver with HYPRE preconditioning for high performance and scalability - this is the fastest solver.
-- **Conjugate Gradient with AMG Preconditioner (`scipy.amg.rs`, `scipy.amg.sa`, `scipy`)**: Uses PyAMG's Ruge-Stuben or Smoothed Aggregation algebraic multigrid as a preconditioner for the conjugate gradient method - 🥈 **`scipy.amg.rs`** is one of the best in terms of performance choices, the most memory efficient.
+- 🥇 **PETSc CG with HYPRE Preconditioner (`petsc`)**: Uses PETSc's CG solver with HYPRE preconditioning for high performance and scalability - leader in memory consumption along with Cholesky but is slightly slower, at least at Intel.
+- **Conjugate Gradient with AMG Preconditioner (`scipy.amg.rs`, `scipy.amg.sa`, `scipy`)**: Uses PyAMG's Ruge-Stuben or Smoothed Aggregation algebraic multigrid as a preconditioner for the conjugate gradient method; **`scipy.amg.rs`** explodes in time for bigger problems, suboptimal.
 
-**Rules of thumb:** If `auto` is specified, `cholesky` solver is used. For memory-limited cases, use `scipy.amg.rs`. For speed, use `petsc`.
+**Rules of thumb:** If `auto` is specified, `cholesky` solver is used. The backup solution is `petsc`.
 
 
 ## Performance
 
-Performance of the code on a truncated rough surface is shown below. The peak memory consumption and the CPU time required to perform connectivity analysis, constructing the matrix and solving the linear system are provided. The real number of DOFs is reported which corresponds to approximately 84% of the square grid $N\times N$ for $N\in\{500,1\,000,2\,000,4\,000,6\,000,8\,000\}$.
+Performance of the code on a truncated rough surface is shown below. The peak memory consumption and the CPU time required to perform connectivity analysis, constructing the matrix and solving the linear system are provided. The real number of DOFs is reported which corresponds to approximately 84% of the square grid $N\times N$ for $N\in\{500,1\,000,2\,000,4\,000,6\,000,8\,000,16\,000\}$.
 
 ![CPU and RAM performance of the solver](CPU_RAM_real_dof_performance.png)
 

@@ -10,15 +10,17 @@ License: BSD 3-Clause
 import numpy as np
 import matplotlib.pyplot as plt
 
-import Transport_code_accelerated as FS
-import RandomField as rf # https://github.com/vyastreb/SelfAffineSurfaceGenerator
+from fluxflow import transport as FS
+from fluxflow import random_field as RF
+ # https://github.com/vyastreb/SelfAffineSurfaceGenerator
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 FS.setup_logging()  
 # FS.set_verbosity('info')
 FS.set_verbosity('error')
+PLOT_RESULTS = False
 
-def main():
+def test_evolution():
     # Construct random self-affine surface
     N0 = 256           # Size of the random field
     solver = "petsc"   # or "cholesky" or "scipy.amg.rs"
@@ -31,7 +33,7 @@ def main():
     np.random.seed(seed)
 
     # Generate a normalized random field
-    random_field = rf.periodic_gaussian_random_field(dim = dim, N = N0, Hurst = Hurst, k_low = k_low, k_high = k_high, plateau = plateau)
+    random_field = RF.periodic_gaussian_random_field(dim = dim, N = N0, Hurst = Hurst, k_low = k_low, k_high = k_high, plateau = plateau)
     random_field /= np.std(random_field)
 
     x = np.linspace(0, 1, N0)
@@ -79,22 +81,24 @@ def main():
             G[step] = delta
             A[step] = np.sum(g == 0) / N0**2
 
-    fig,ax = plt.subplots(1, 2, figsize=(10, 5))
-    ax[0].grid()
-    ax[0].plot(G, Q, 'o-', color="skyblue")
-    ax[0].set_xlabel('Gap (G)')
-    ax[0].set_ylabel('Flux (Q)')
-    ax[0].set_yscale('log')
-    ax[0].set_title('Gap vs Flux')
+    if PLOT_RESULTS:
+        fig,ax = plt.subplots(1, 2, figsize=(10, 5))
+        ax[0].grid()
+        ax[0].plot(G, Q, 'o-', color="skyblue")
+        ax[0].set_xlabel('Gap (G)')
+        ax[0].set_ylabel('Flux (Q)')
+        ax[0].set_yscale('log')
+        ax[0].set_title('Gap vs Flux')
 
-    ax[1].grid()
-    ax[1].plot(A, Q, 'o-', color='firebrick')
-    ax[1].set_xlabel('Real Contact Area (A)')
-    ax[1].set_ylabel('Flux (Q)')
-    ax[1].set_yscale('log')
-    ax[1].set_title('Real Contact Area vs Flux')
-    plt.show()
-    fig.savefig("FS_Q_vs_G_n_{0:d}_solver_{1}.png".format(N0, solver))
+        ax[1].grid()
+        ax[1].plot(A, Q, 'o-', color='firebrick')
+        ax[1].set_xlabel('Real Contact Area (A)')
+        ax[1].set_ylabel('Flux (Q)')
+        ax[1].set_yscale('log')
+        ax[1].set_title('Real Contact Area vs Flux')
+        plt.show()
+        fig.savefig("FS_Q_vs_G_n_{0:d}_solver_{1}.png".format(N0, solver))
 
 if __name__ == "__main__":
-    main()
+    PLOT_RESULTS = True
+    test_evolution()

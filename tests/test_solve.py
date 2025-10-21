@@ -13,23 +13,18 @@ from numpy.fft import ifft2, fftfreq, fftshift, ifftshift, fftn, ifftn
 import time
 
 
-import Transport_code_accelerated as FS
-import RandomField as rf # https://github.com/vyastreb/SelfAffineSurfaceGenerator
+from fluxflow import transport as FS
+from fluxflow import random_field as RF
+ # https://github.com/vyastreb/SelfAffineSurfaceGenerator
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 FS.setup_logging()  
 FS.set_verbosity('info')
 # FS.set_verbosity('warning')
 
-def main():
+def test_solve():
     N0 = 512           # Size of the random field
-    """
-        Available solvers:
-        + "scipy.amg-rs" - optimal for memory
-        + "cholesky"     - optimal for speed (if enough memory), only 10% more than petsc
-        + "petsc"        - very fast and memory efficient, 4x scipy.amg.rs and only 20% more memory
-    """
-    solver = "scipy.amg-smooth_aggregation"  # Choose solver here
+    solver = "scipy.amg-ilu"  # Choose solver here
     k_low =   8 / N0   # Lower cutoff of the power spectrum
     k_high = 20 / N0   # Upper cutoff of the power spectrum
     Hurst = 0.5         # Hurst exponent
@@ -39,7 +34,7 @@ def main():
     np.random.seed(seed)
 
     # Generate a normalized random field
-    random_field = rf.periodic_gaussian_random_field(dim = dim, N = N0, Hurst = Hurst, k_low = k_low, k_high = k_high, plateau = plateau)
+    random_field = RF.periodic_gaussian_random_field(dim = dim, N = N0, Hurst = Hurst, k_low = k_low, k_high = k_high, plateau = plateau)
     random_field /= np.std(random_field)
 
     x = np.linspace(0, 1, N0)
@@ -64,4 +59,4 @@ def main():
     np.savez_compressed(output_name, pressure=pressure, flux=flux)
 
 if __name__ == "__main__":
-    main()
+    test_solve()

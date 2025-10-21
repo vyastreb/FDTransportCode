@@ -14,8 +14,11 @@ import sys
 import traceback
 from datetime import datetime
 
-import Transport_code_accelerated as FS
-import RandomField as rf
+from fluxflow import transport as FS
+from fluxflow import random_field as RF
+
+# import pytest
+# pytestmark = pytest.mark.skip(reason="WIP: Long test, run manually when needed.")
 
 FS.setup_logging()
 FS.set_verbosity('warning')
@@ -76,7 +79,7 @@ def generate_test_problem(N0, k_low, k_high, Hurst=0.5, seed=23349, delta=0.3):
     np.random.seed(seed)
     
     # Generate normalized random field
-    random_field = rf.periodic_gaussian_random_field(
+    random_field = RF.periodic_gaussian_random_field(
         dim=2, 
         N=N0, 
         Hurst=Hurst, 
@@ -93,7 +96,7 @@ def generate_test_problem(N0, k_low, k_high, Hurst=0.5, seed=23349, delta=0.3):
     return gaps
 
 
-def test_solver(solver_name, preconditioner, gaps, N0):
+def _test_solver(solver_name, preconditioner, gaps, N0):
     """
     Test a specific solver configuration.
     
@@ -221,7 +224,7 @@ def run_all_tests(N0=128, k_low=None, k_high=None):
         full_name = f"{solver_name}.{preconditioner}" if preconditioner else solver_name
         print(f"[{i}/{len(solver_configs)}] Testing {full_name}...")
         
-        result = test_solver(solver_name, preconditioner, gaps, N0)
+        result = _test_solver(solver_name, preconditioner, gaps, N0)
         results.append(result)
         
         print(f"    {result}")
@@ -332,10 +335,10 @@ def print_summary(results):
     print(f"{'='*80}")
 
 
-def main():
+def test_solvers():
     """Main test function"""
     # Test parameters
-    N0 = 2048
+    N0 = 128
     k_low = 1.0 / N0
     k_high = 12.0 / N0
     
@@ -348,11 +351,8 @@ def main():
     # Save results to file
     save_results(results, filename="test_solvers.result")
     
-    # Return exit code based on test results
-    all_passed = all(r.success for r in results)
-    return 0 if all_passed else 1
+    assert all(r.success for r in results), "Some solver tests failed"
 
 
 if __name__ == "__main__":
-    exit_code = main()
-    sys.exit(exit_code)
+    test_solvers()

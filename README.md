@@ -28,12 +28,14 @@ $$ -->
 
 ## Usage
 
-1. Clone files
+1. Clone the repository
 ```bash 
 git clone git@github.com:vyastreb/FDTransportCode.git
+cd FDTransportCode
 ```
-2. Install required packages
+2. Install the package and its dependencies
 ```bash
+pip install -e .
 pip install -r requirements.txt
 ```
 or with conda
@@ -43,17 +45,24 @@ conda install --file requirements.txt
 3. Run a minimal test (incompressible potential flow around a circular inclusion)
 ```python
 import numpy as np
-import Transport_code_accelerated as FS
+from fluxflow import transport as FS
 import matplotlib.pyplot as plt
 
 n = 100
 X, Y = np.meshgrid(np.linspace(0, 1, n), np.linspace(0, 1, n))
 gaps = (np.sqrt((X - 0.5)**2 + (Y - 0.5)**2) > 0.2).astype(float)
 
-_, _, flux = FS.solve_fluid_problem(gaps, "auto")
-if flux is not None: plt.imshow(np.sqrt(flux[:,:,0]**2 + flux[:,:,1]**2), origin='lower', cmap='jet'); plt.show()
+_, _, flux = FS.solve_fluid_problem(gaps, solver="auto")
+if flux is not None:
+    plt.imshow(np.sqrt(flux[:, :, 0]**2 + flux[:, :, 1]**2),
+               origin='lower', cmap='jet')
+    plt.show()
 ```
-4. Try more advanced tests `/tests/test_evolution.py` and `/tests/test_solve.py`.
+4. Run the test suit
+```bash
+python -m pytest -q
+```
+5. Or run these tests manually `/tests/test_evolution.py`, `/tests/test_solve.py` and `/tests/test_solvers.py`.
 
 ## Available Solvers and Preconditioners
 

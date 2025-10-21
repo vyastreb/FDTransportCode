@@ -338,7 +338,7 @@ def print_summary(results):
 def test_solvers():
     """Main test function"""
     # Test parameters
-    N0 = 128
+    N0 = 2048
     k_low = 1.0 / N0
     k_high = 12.0 / N0
     

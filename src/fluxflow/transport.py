@@ -349,10 +349,6 @@ def solve_diffusion(n, g, solver="auto"):
         solver_name = solver
         preconditioner = None
 
-    print("solver = ", solver)
-    print("solver_name = ", solver_name)
-    print("preconditioner = ", preconditioner)
-
     if solver_name not in SOLVERS:
         logger.warning(f"Unknown solver: {solver_name}, using 'cholesky' instead.")
         solver_name = "cholesky"

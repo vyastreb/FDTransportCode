@@ -341,18 +341,29 @@ def solve_diffusion(n, g, solver="auto"):
     # Solve the linear system  #
     # ************************ #
     # Known solvers
-    SOLVERS = ["none", "auto", "cholesky", "pardiso", "scipy.spsolve", "scipy.amg.rs", "scipy.amg.sa", "scipy", "petsc", "petsc.mumps"]
-    if solver not in SOLVERS:
-        logger.warning(f"Unknown solver: {solver}, using 'cholesky' instead.")
-        solver = "cholesky"
-    if solver == "none" or solver == "auto":
-        solver = "cholesky"
+    SOLVERS = ["none", "auto", "cholesky", "pardiso", "scipy-spsolve", "scipy", "petsc", "petsc-cg", "petsc-mumps"]
+
+    if '.' in solver:
+        solver_name, preconditioner = solver.split('.')
+    else:
+        solver_name = solver
+        preconditioner = None
+
+    print("solver = ", solver)
+    print("solver_name = ", solver_name)
+    print("preconditioner = ", preconditioner)
+
+    if solver_name not in SOLVERS:
+        logger.warning(f"Unknown solver: {solver_name}, using 'cholesky' instead.")
+        solver_name = "cholesky"
+    if solver_name == "none" or solver_name == "auto":
+        solver_name = "cholesky"
         logger.info("Auto-selecting 'cholesky' solver.")
     
     ####################################
     #     DIRECT CHOLESKY SOLVER       #
     ####################################        
-    if solver == "cholesky":
+    if solver_name == "cholesky":
         logger.info("Using CHOLMOD solver from scikit-sparse.")
         A = A.tocsc()
         from sksparse.cholmod import cholesky
@@ -361,7 +372,7 @@ def solve_diffusion(n, g, solver="auto"):
     ####################################
     #    DIRECT MKL PARDISO SOLVER     #
     ####################################        
-    elif solver == "pardiso": # Intel oneAPI Math Kernel Library PARDISO solver
+    elif solver_name == "pardiso": # Intel oneAPI Math Kernel Library PARDISO solver
         logger.info("Using PARDISO solver from Intel oneAPI MKL.")
         A = A.tocsr()
         import pypardiso
@@ -389,25 +400,29 @@ def solve_diffusion(n, g, solver="auto"):
     ####################################
     #    DIRECT SOLVER FROM SCIPY      #
     ####################################
-    elif solver == "scipy.spsolve": # (too slow and memory consuming)
-        from scipy.sparse.linalg import spsolve
-        logger.info("Using SciPy spsolve (LU) solver.")
-        A = A.tocsc()
-        p = spsolve(A, b)
+    # elif solver == "scipy.spsolve": # (too slow and memory consuming)
+    #     from scipy.sparse.linalg import spsolve
+    #     logger.info("Using SciPy spsolve (LU) solver.")
+    #     A = A.tocsc()
+    #     p = spsolve(A, b)
     ##########################################
     #   SCIPY ITERATIVE SOLVER WITH AMG PC   #
     ##########################################
-    elif solver == "scipy.amg.rs" or solver == "scipy.amg.sa" or solver == "scipy":        
-        logger.info("Using Conjugate Gradient iterative solver.")
+    elif solver_name == "scipy":        
+        logger.info("Using SciPy Conjugate Gradient iterative solver.")
         A = A.tocsr()
+        from scipy.sparse.linalg import cg
 
-        preconditioner = "amg.rs"
-        if solver == "scipy.amg.sa":
-            preconditioner = "amg.smooth_aggregation"
+        _preconditioner = preconditioner
+        if preconditioner == "amg-sa":
+            _preconditioner = "amg-smooth_aggregation"
+        elif preconditioner == "amg-rs":
+            _preconditioner = "amg-rs"
+        elif preconditioner is None:
+            _preconditioner = "amg-rs"  # default
         
         try:
-            M = get_preconditioner(A, method=preconditioner)
-            logger.info(f"Using {preconditioner} preconditioner.")
+            M = get_preconditioner(A, method=_preconditioner)
         except Exception as e:
             logger.error("Failed to create AMG preconditioner. Error: " + str(e))
             raise RuntimeError("Failed to create AMG preconditioner") from e
@@ -428,8 +443,7 @@ def solve_diffusion(n, g, solver="auto"):
     ###########################################
     #   PETSC ITERATIVE SOLVER WITH GAMG PC   #
     ###########################################
-    elif solver == "petsc":
-        logger.info("Using PETSc KSP iterative solver with HYPRE preconditioner.")
+    elif solver_name == "petsc-cg":
         from petsc4py import PETSc
         A = A.tocsr()
         A_p = PETSc.Mat().createAIJ(size=A.shape, csr=(A.indptr, A.indices, A.data))
@@ -438,8 +452,23 @@ def solve_diffusion(n, g, solver="auto"):
         # TODO: can further try different PETSc solvers (the choice is huge: https://petsc.org/release/petsc4py/reference/petsc4py.PETSc.KSP.Type.html
         ksp.setType('cg')
         pc = ksp.getPC()
+        if preconditioner == "gamg":
+            pc.setType('gamg')
+        elif preconditioner == "hypre":
+            pc.setType('hypre')
+            # pc.setHYPREType('boomeramg')
+        elif preconditioner == "ilu":
+            pc.setType('ilu') 
+        else:
+            logger.info(f"Unknown preconditioner {preconditioner}. Using default ILU preconditioner.")
+            preconditioner = "ilu"
+            pc.setType('ilu') # default
+
+        logger.info(f"Using PETSc KSP iterative solver with {preconditioner} preconditioner.")
+
         # pc.setType('gamg')     
-        pc.setType('hypre')
+        # pc.setType('hypre')
+        # pc.setType('ilu')
         # pc.setHYPREType('boomeramg')
         ksp.setTolerances(rtol=1e-8)
         ksp.setFromOptions()
@@ -447,12 +476,12 @@ def solve_diffusion(n, g, solver="auto"):
         x_p = b_p.duplicate()
         ksp.solve(b_p, x_p)
         p = x_p.getArray()
-    elif solver == "petsc.mumps":
+    elif solver_name == "petsc-mumps":
         logger.info("Using PETSc MUMPS direct solver.")
         from petsc4py import PETSc
         A = A.tocsr()
         A_p = PETSc.Mat().createAIJ(size=A.shape, csr=(A.indptr, A.indices, A.data))
-        b_p = PETSc.Vec().createWithArray(b); x_p = b_p.duplicate()
+        b_p = PETSc.Vec().createWithArray(b)
         x_p = b_p.duplicate()
 
         ksp = PETSc.KSP().create()
@@ -537,7 +566,7 @@ def solve_fluid_problem(gaps, solver):
         p = solve_diffusion(n, gaps_dilated, solver)
         logger.info("Fluid solver: CPU time for n = {0:d}: {1:.3f} sec".format(n, time.time() - start_time))
     except Exception as e:
-        logger.error("Error in fluid solver: ", e)
+        logger.error(f"Error in fluid solver: {e}")
         return None, None, None
 
     logger.info("Fluid solver finished.")
@@ -557,7 +586,7 @@ def solve_fluid_problem(gaps, solver):
     # return gaps_original, p, filtered_flux
 
 def get_preconditioner(A, method = "amg.rs"):
-    if method == "amg.smooth_aggregation":
+    if method == "amg-smooth_aggregation":
         import pyamg
         from scipy.sparse.linalg import LinearOperator
 
@@ -570,9 +599,9 @@ def get_preconditioner(A, method = "amg.rs"):
             return M
         except:
             logger.warning("AMG.Smooth_Aggregation failed, try AMG.RS")
-            method = "amg.rs"
+            method = "amg-rs"
 
-    if method == "amg.rs":
+    if method == "amg-rs":
         import pyamg
         from scipy.sparse.linalg import LinearOperator
 
@@ -588,7 +617,6 @@ def get_preconditioner(A, method = "amg.rs"):
     else:
         logger.warning(f"Unknown preconditioner method: {method}")
         raise ValueError(f"Unknown preconditioner method: {method}")
-    return None
 
 # Total flux calculation
 def compute_total_flux(filtered_gaps, flux, N0):

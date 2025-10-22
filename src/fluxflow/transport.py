@@ -349,11 +349,13 @@ def solve_diffusion(n, g, solver="auto"):
         preconditioner = None
 
     if solver_name not in SOLVERS:
-        logger.warning(f"Unknown solver: {solver_name}, using 'cholesky' instead.")
-        solver_name = "petsc-cg.hypre"
+        logger.warning(f"Unknown solver: {solver_name}, using 'petsc-cg' with 'hypre' preconditioner instead.")
+        solver_name = "petsc-cg"
+        preconditioner = "hypre"
     if solver_name == "none" or solver_name == "auto":
-        solver_name = "petsc-cg.hypre"
-        logger.info("Auto-selecting 'petsc-cg.hypre' solver.")
+        solver_name = "petsc-cg"
+        preconditioner = "hypre"
+        logger.info("Auto-selecting 'petsc-cg' solver with 'hypre' preconditioner.")
     
     ####################################
     #     DIRECT CHOLESKY SOLVER       #

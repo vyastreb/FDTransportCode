@@ -71,7 +71,7 @@ The fluid flow solver supports several linear system solvers and preconditioners
 | Solver String | Solver Type | Preconditioner | Backend | Description |
 |---------------|-------------|----------------|---------|-------------|
 | `petsc-cg.hypre` | Iterative (CG) | HYPRE | PETSc | 🥇 CG with HYPRE BoomerAMG. The fastest for moderate problems. |
-| `pardiso` | Direct | - | Intel MKL | PARDISO direct solver. Very fast but consumes a lot of memory. |
+| `pardiso` | Direct | - | Intel MKL | 🥇PARDISO direct solver. The fastest for bigger problems, but consumes a lot of memory. |
 | `scipy.amg-rs` | Iterative (CG) | AMG (Ruge-Stuben) | SciPy/PyAMG | CG with Ruge-Stuben AMG. Only two times slower than the fastest.  |
 | `scipy.amg-smooth_aggregation` | Iterative (CG) | AMG (Smoothed Aggregation) | SciPy/PyAMG | CG with Smoothed Aggregation AMG. Memory efficient, but relatively slow.|
 | `cholesky` | Direct | - | scikit-sparse | CHOLMOD Cholesky decomposition. Slightly lower memory consumption for huge problems, but it is slow. |

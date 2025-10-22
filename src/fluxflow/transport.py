@@ -350,10 +350,10 @@ def solve_diffusion(n, g, solver="auto"):
 
     if solver_name not in SOLVERS:
         logger.warning(f"Unknown solver: {solver_name}, using 'cholesky' instead.")
-        solver_name = "cholesky"
+        solver_name = "petsc-cg.hypre"
     if solver_name == "none" or solver_name == "auto":
-        solver_name = "cholesky"
-        logger.info("Auto-selecting 'cholesky' solver.")
+        solver_name = "petsc-cg.hypre"
+        logger.info("Auto-selecting 'petsc-cg.hypre' solver.")
     
     ####################################
     #     DIRECT CHOLESKY SOLVER       #

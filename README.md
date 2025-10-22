@@ -70,41 +70,77 @@ The fluid flow solver supports several linear system solvers and preconditioners
 
 | Solver String | Solver Type | Preconditioner | Backend | Description |
 |---------------|-------------|----------------|---------|-------------|
-| `cholesky` | Direct | - | scikit-sparse | 🏆 CHOLMOD Cholesky decomposition. Fastest and most memory efficient. |
-| `pardiso` | Direct | - | Intel MKL | PARDISO direct solver. Suboptimal in memory and speed. |
-| `scipy` | Iterative (CG) | AMG (Ruge-Stuben) | SciPy/PyAMG | Conjugate Gradient with default AMG preconditioner. |
-| `scipy.amg-rs` | Iterative (CG) | AMG (Ruge-Stuben) | SciPy/PyAMG | CG with Ruge-Stuben AMG. Explodes in time for large problems. |
-| `scipy.amg-smooth_aggregation` | Iterative (CG) | AMG (Smoothed Aggregation) | SciPy/PyAMG | CG with Smoothed Aggregation AMG. |
-| `petsc-cg.gamg` | Iterative (CG) | GAMG | PETSc | CG with Geometric Algebraic Multigrid. |
-| `petsc-cg.hypre` | Iterative (CG) | HYPRE | PETSc | 🥇 CG with HYPRE BoomerAMG. Excellent memory efficiency. |
-| `petsc-cg.ilu` | Iterative (CG) | ILU | PETSc | CG with Incomplete LU factorization. |
-| `petsc-mumps` | Direct | - | PETSc/MUMPS | MUMPS direct solver via PETSc. |
-| `auto` | - | - | - | Automatically selects `cholesky` with `petsc` as fallback. |
+| `petsc-cg.hypre` | Iterative (CG) | HYPRE | PETSc | 🥇 CG with HYPRE BoomerAMG. The fastest for moderate problems. |
+| `pardiso` | Direct | - | Intel MKL | PARDISO direct solver. Very fast but consumes a lot of memory. |
+| `scipy.amg-rs` | Iterative (CG) | AMG (Ruge-Stuben) | SciPy/PyAMG | CG with Ruge-Stuben AMG. Only two times slower than the fastest.  |
+| `scipy.amg-smooth_aggregation` | Iterative (CG) | AMG (Smoothed Aggregation) | SciPy/PyAMG | CG with Smoothed Aggregation AMG. Memory efficient, but relatively slow.|
+| `cholesky` | Direct | - | scikit-sparse | CHOLMOD Cholesky decomposition. Slightly lower memory consumption for huge problems, but it is slow. |
+| `petsc-cg.gamg` | Iterative (CG) | GAMG | PETSc | CG with Geometric Algebraic Multigrid. Not very reliable in performance, 2-3 times slower than the fastest solver. |
+| `petsc-mumps` | Direct | - | PETSc/MUMPS | MUMPS direct solver via PETSc. For moderate problems, five times slower than the fastest solver. |
+| `petsc-cg.ilu` | Iterative (CG) | ILU | PETSc | CG with Incomplete LU factorization. The slowest. |
+
+Relevant CPU times for a relatively small problem with $N\times N = 2000\times 2000$ grid points.
+
+| **Solver**                    | **CPU time (s)** |
+|-------------------------------|-----------------:|
+| petsc-cg.hypre                | 4.46 |
+| pardiso                       | 8.53 |
+| scipy.amg-rs                  | 8.96 |
+| petsc-cg.gamg                 | 11.96 |
+| scipy.amg-smooth_aggregation  | 15.48 |
+| cholesky                      | 20.61 |
+| petsc-mumps                   | 26.14 |
+| petsc-cg.ilu                  | 134.98 |
 
 **Rules of thumb:** 
-- For fastest computation: use `cholesky` (default when `auto` is specified)
-- For best memory efficiency: use `cholesky` or `petsc-cg.hypre`
-- For large-scale problems: prefer `petsc-cg.hypre` for scalability
-- Avoid `scipy.amg-rs` for problems with N > 2000
+- For fastest computation: use `pardiso` (consumes a lot of memory) or `petsc-cg.hypre` (the only difficulty is to install PETSc);
+- For best memory efficiency: use `scipy.amg-rs`;
+- For small-scale problems (for $N<2000$): use `pardiso`;
+- For large-scale problems (for $N>2000$): use `petsc-cg.hypre`;
+- Avoid `petsc-cg.ilu`.
 
+The most reliable solvers for big problems are `petsc-cg.hypre` and `pardiso`. Here are the test data obtained on rough "contact" problems on Intel(R) Xeon(R) Platinum 8488C. Only solver's time is shown.
 
-## Performance
+<table>
+  <thead>
+    <tr><th rowspan="2">N</th><th colspan="2">CPU time (s)</th></tr>
+    <tr><th>PETSc-CG.Hypre</th><th>Intel MKL Pardiso</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>20 000</td><td>1059.22</td><td>∅</td></tr>
+    <tr><td>10 000</td><td>278.18</td><td>112.38</td></tr>
+    <tr><td>5 000</td><td>70.62</td><td>28.42</td></tr>
+    <tr><td>2 500</td><td>17.72</td><td>6.34</td></tr>
+    <tr><td>1 250</td><td>4.47</td><td>1.93</td></tr>
+  </tbody>
+</table>
 
-Performance of the code on a truncated rough surface is shown below. The peak memory consumption and the CPU time required to perform connectivity analysis, constructing the matrix and solving the linear system are provided. The real number of DOFs is reported which corresponds to approximately 84% of the square grid $N\times N$ for $N\in\{500,1\,000,2\,000,4\,000,6\,000,8\,000,16\,000\}$.
+∅ $-$ `pardiso` could not run as it required more than 256 GB or memory.
+
+**CPU/RAM Performance**
+
+Performance of the code on a truncated rough surface is shown below. The peak memory consumption and the CPU time required to perform connectivity analysis, constructing the matrix and solving the linear system are provided. The real number of DOFs is reported which corresponds to approximately 84% of the square grid $N\times N$ for $N\in\{500, 1\,000, 2\,000, 4\,000, 6\,000, 8\,000, 16\,000\}$.
 
 ![CPU and RAM performance of the solver](./docs/img/CPU_RAM_real_dof_performance.png)
 
 
+
+
+
 ## Illustration
 
-An example of a fluid flow simulation, solved on the grid $n\times n = 8\,000 \times 8\,000$ which features a truncated self-affine rough surface with a rich spectrum. Solution time on my laptop with `petsc` is only 97 seconds and the peak memory consumption is 25.8 GB.
+An example of a fluid flow simulation, solved on the grid $N\times N = 8\,000 \times 8\,000$ which features a truncated self-affine rough surface with a rich spectrum. Solution time on my laptop with `petsc` is only 97 seconds and the peak memory consumption is 25.8 GB.
 
 ![Solution for 64 million grid points](./docs/img/illustration.jpg)
+
+Another example for a grid $N\times N = 20\,000 \times 20\,000$. Simulation time (sequential) $\approx 17$ minutes on Intel(R) Xeon(R) Platinum 8488C with the peak memory below 230 GB with `petsc-cg.gamg` solver.
+
+![Solution for 400 million grid points](./docs/img/illustration_2.jpg)
 
 ## Info
 
 + Author: Vladislav A. Yastrebov (CNRS, Mines Paris - PSL)
-+ AI usage: Cursor (different models), ChatGPT 4o, 5, Claude Sonnet 3.7, 4, 4.5
++ AI usage: Cursor & Copilot (different models), ChatGPT 4o, 5, Claude Sonnet 3.7, 4, 4.5
 + License: BSD 3-clause
 + Date: Sept-Oct 2025
 

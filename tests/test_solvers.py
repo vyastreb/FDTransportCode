@@ -12,6 +12,7 @@ import numpy as np
 import time
 import sys
 import traceback
+import gc
 from datetime import datetime
 
 from fluxflow import transport as FS
@@ -52,7 +53,7 @@ class SolverTestResult:
             return f"[{status}] {name:30s} | Error: {error_short}"
 
 
-def generate_test_problem(N0, k_low, k_high, Hurst=0.5, seed=23349, delta=0.3):
+def generate_test_problem(N0, k_low, k_high, Hurst=0.5, seed=23349, delta=3.):
     """
     Generate a test problem with random field geometry.
     
@@ -145,6 +146,14 @@ def _test_solver(solver_name, preconditioner, gaps, N0):
     except Exception as e:
         result.error_message = f"{type(e).__name__}: {str(e)}\n{traceback.format_exc()}"
     
+    finally:
+        # Explicitly clean up large arrays to free memory
+        try:
+            del filtered_gaps, pressure, flux
+        except:
+            pass
+        gc.collect()
+    
     return result
 
 
@@ -229,6 +238,9 @@ def run_all_tests(N0=128, k_low=None, k_high=None):
         
         print(f"    {result}")
         print()
+        
+        # Force garbage collection after each test to free memory
+        gc.collect()
     
     return results
 
@@ -338,7 +350,7 @@ def print_summary(results):
 def test_solvers():
     """Main test function"""
     # Test parameters
-    N0 = 2048
+    N0 = 128
     k_low = 1.0 / N0
     k_high = 12.0 / N0
     

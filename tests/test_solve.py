@@ -24,7 +24,7 @@ FS.set_verbosity('info')
 
 def test_solve():
     N0 = 512           # Size of the random field
-    solver = "scipy.amg-ilu"  # Choose solver here
+    solver = "petsc-cg.ilu"  # Choose solver here
     k_low =   8 / N0   # Lower cutoff of the power spectrum
     k_high = 20 / N0   # Upper cutoff of the power spectrum
     Hurst = 0.5         # Hurst exponent
@@ -50,13 +50,13 @@ def test_solve():
 
     # Solve for the current orientation
     start = time.time()
-    _, pressure, flux = FS.solve_fluid_problem(g, solver)
+    gap, pressure, flux = FS.solve_fluid_problem(g, solver)
     print("Solver CPU time: ", time.time() - start, "s")
 
     # Save results in npz file
     output_name = f"fluid_flow_H_{Hurst}_kl_{int(k_low*N0):d}_ks_{int(k_high*N0):d}_N_{N0}_delta_{delta:.2f}_solver_{solver}.npz"
     print("Saving results to ", output_name)
-    np.savez_compressed(output_name, pressure=pressure, flux=flux)
+    np.savez_compressed(output_name, gap=gap, pressure=pressure, flux=flux)
 
 if __name__ == "__main__":
     test_solve()

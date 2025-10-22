@@ -340,7 +340,6 @@ def solve_diffusion(n, g, solver="auto"):
     # ************************ #
     # Solve the linear system  #
     # ************************ #
-    # Known solvers
     SOLVERS = ["none", "auto", "cholesky", "pardiso", "scipy-spsolve", "scipy", "petsc", "petsc-cg", "petsc-mumps"]
 
     if '.' in solver:

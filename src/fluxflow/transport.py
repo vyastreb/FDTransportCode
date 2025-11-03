@@ -12,7 +12,7 @@ License: BSD 3-Clause
 
 import numpy as np
 from skimage.measure import label
-from scipy.sparse import coo_matrix
+from scipy.sparse import coo_matrix, save_npz
 from numba import jit, njit
 import time
 import logging
@@ -329,13 +329,19 @@ def _filter_flux_numba(n, gaps, flux):
     
     return filtered_flux
 
-def solve_diffusion(n, g, solver="auto"):
+def solve_diffusion(n, g, solver="auto", save_matrix=False):
     """Solve diffusion with external reservoir boundary conditions"""
     mean_gap = np.mean(g)
     if mean_gap <= 0:
         raise ValueError("Invalid gap field")
     
     A, b = create_diffusion_matrix(n, g, None) 
+
+    # Save matrix and RHS for debugging
+    if save_matrix:
+        logger.info("Saving transport matrix and RHS to npz files.")
+        save_npz("transport_matrix.npz", A, compressed=True)
+        np.savez_compressed("transport_rhs.npz", b=b)
 
     # ************************ #
     # Solve the linear system  #
@@ -534,7 +540,7 @@ def connectivity_analysis(gaps):
         logger.info("No percolation detected.")
         return None
 
-def solve_fluid_problem(gaps, solver):
+def solve_fluid_problem(gaps, solver, save_matrix=False):
     logger.info("Starting fluid solver.")
 
     n = gaps.shape[0]
@@ -560,7 +566,7 @@ def solve_fluid_problem(gaps, solver):
     try:
         # Solve for pressure using dilated gaps
         start_time = time.time()
-        p = solve_diffusion(n, gaps_dilated, solver)
+        p = solve_diffusion(n, gaps_dilated, solver=solver, save_matrix=save_matrix)
         logger.info("Fluid solver: CPU time for n = {0:d}: {1:.3f} sec".format(n, time.time() - start_time))
     except Exception as e:
         logger.error(f"Error in fluid solver: {e}")

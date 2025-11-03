@@ -23,8 +23,8 @@ FS.set_verbosity('info')
 # FS.set_verbosity('warning')
 
 def test_solve():
-    N0 = 512           # Size of the random field
-    solver = "petsc-cg.ilu"  # Choose solver here
+    N0 = 4000           # Size of the random field
+    solver = "pardiso"  # Choose solver here
     k_low =   8 / N0   # Lower cutoff of the power spectrum
     k_high = 20 / N0   # Upper cutoff of the power spectrum
     Hurst = 0.5         # Hurst exponent
@@ -44,7 +44,7 @@ def test_solve():
     #           Compute and PLOT ALL                #
     #################################################
 
-    delta = 0.3
+    delta = 0.5
     g = random_field + delta
     g[g < 0] = 0
 

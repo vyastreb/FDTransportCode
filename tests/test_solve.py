@@ -23,7 +23,7 @@ FS.set_verbosity('info')
 # FS.set_verbosity('warning')
 
 def test_solve():
-    N0 = 4000           # Size of the random field
+    N0 = 500           # Size of the random field
     solver = "pardiso"  # Choose solver here
     k_low =   8 / N0   # Lower cutoff of the power spectrum
     k_high = 20 / N0   # Upper cutoff of the power spectrum
@@ -51,6 +51,8 @@ def test_solve():
     # Solve for the current orientation
     start = time.time()
     gap, pressure, flux = FS.solve_fluid_problem(g, solver)
+    # If need to store the matrix for debugging
+    # gap, pressure, flux = FS.solve_fluid_problem(g, solver, save_matrix=True, save_matrix_type="csr")
     print("Solver CPU time: ", time.time() - start, "s")
 
     # Save results in npz file

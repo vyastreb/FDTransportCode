@@ -329,7 +329,7 @@ def _filter_flux_numba(n, gaps, flux):
     
     return filtered_flux
 
-def solve_diffusion(n, g, solver="auto", save_matrix=False):
+def solve_diffusion(n, g, solver="auto", save_matrix=False, save_matrix_type="coo"):
     """Solve diffusion with external reservoir boundary conditions"""
     mean_gap = np.mean(g)
     if mean_gap <= 0:
@@ -339,8 +339,16 @@ def solve_diffusion(n, g, solver="auto", save_matrix=False):
 
     # Save matrix and RHS for debugging
     if save_matrix:
-        logger.info("Saving transport matrix and RHS to npz files.")
-        save_npz("transport_matrix.npz", A, compressed=True)
+        logger.info(f"Saving transport matrix and RHS to npz files in {save_matrix_type} format.")
+        if save_matrix_type == "coo":
+            save_npz("transport_matrix.npz", A, compressed=True)       
+        elif save_matrix_type == "csr":
+            save_npz("transport_matrix.npz", A.tocsr(), compressed=True)
+        elif save_matrix_type == "csc":
+            save_npz("transport_matrix.npz", A.tocsc(), compressed=True)
+        else:   
+            logger.warning(f"Unknown save_matrix_type: {save_matrix_type}, defaulting to 'coo'.")
+            save_npz("transport_matrix.npz", A, compressed=True)
         np.savez_compressed("transport_rhs.npz", b=b)
 
     # ************************ #
@@ -540,7 +548,7 @@ def connectivity_analysis(gaps):
         logger.info("No percolation detected.")
         return None
 
-def solve_fluid_problem(gaps, solver, save_matrix=False):
+def solve_fluid_problem(gaps, solver, save_matrix=False, save_matrix_type="coo"):
     logger.info("Starting fluid solver.")
 
     n = gaps.shape[0]
@@ -566,7 +574,7 @@ def solve_fluid_problem(gaps, solver, save_matrix=False):
     try:
         # Solve for pressure using dilated gaps
         start_time = time.time()
-        p = solve_diffusion(n, gaps_dilated, solver=solver, save_matrix=save_matrix)
+        p = solve_diffusion(n, gaps_dilated, solver=solver, save_matrix=save_matrix, save_matrix_type=save_matrix_type)
         logger.info("Fluid solver: CPU time for n = {0:d}: {1:.3f} sec".format(n, time.time() - start_time))
     except Exception as e:
         logger.error(f"Error in fluid solver: {e}")

@@ -22,7 +22,7 @@ FS.setup_logging()
 FS.set_verbosity('info')
 
 def test_solve():
-    N0 = 2000           # Size of the random field
+    N0 = 1000           # Size of the random field
     solver = "pardiso"  # Choose solver here
     k_low =   8 / N0   # Lower cutoff of the power spectrum
     k_high = 20 / N0   # Upper cutoff of the power spectrum

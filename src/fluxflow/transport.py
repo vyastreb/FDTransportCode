@@ -398,7 +398,8 @@ def solve_diffusion(n, g, solver="auto", rtol=None, save_matrix=False, save_matr
     ####################################        
     elif solver_name == "pardiso": # Intel oneAPI Math Kernel Library PARDISO solver
         logger.info("Using PARDISO solver from Intel oneAPI MKL.")
-        A = A.tocsr()
+        if A.format != 'csr':
+            A = A.tocsr()
         import pypardiso
         pardiso_solver = pypardiso.PyPardisoSolver()
         # Fastest configuration, see https://www.smcm.iqfr.csic.es/docs/intel/mkl/mkl_manual/ssr/ssr_pardiso_parameters.htm
@@ -434,7 +435,8 @@ def solve_diffusion(n, g, solver="auto", rtol=None, save_matrix=False, save_matr
     ##########################################
     elif solver_name == "scipy":        
         logger.info("Using SciPy Conjugate Gradient iterative solver.")
-        A = A.tocsr()
+        if A.format != 'csr':
+            A = A.tocsr()
         from scipy.sparse.linalg import cg
 
         _preconditioner = preconditioner
@@ -462,7 +464,7 @@ def solve_diffusion(n, g, solver="auto", rtol=None, save_matrix=False, save_matr
     ###########################################
     elif solver_name == "petsc-cg":
         from petsc4py import PETSc
-        if not hasattr(A, 'indptr'):
+        if A.format != 'csr':
             A = A.tocsr()
         A_p = PETSc.Mat().createAIJ(size=A.shape, csr=(A.indptr, A.indices, A.data))
         ksp = PETSc.KSP().create()
@@ -497,7 +499,8 @@ def solve_diffusion(n, g, solver="auto", rtol=None, save_matrix=False, save_matr
     elif solver_name == "petsc-mumps":
         logger.info("Using PETSc MUMPS direct solver.")
         from petsc4py import PETSc
-        A = A.tocsr()
+        if A.format != 'csr':
+            A = A.tocsr()
         A_p = PETSc.Mat().createAIJ(size=A.shape, csr=(A.indptr, A.indices, A.data))
         b_p = PETSc.Vec().createWithArray(b)
         x_p = b_p.duplicate()

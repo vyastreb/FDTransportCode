@@ -3,7 +3,7 @@ Finite-Difference Reynolds Fluid Flow Solver
 
 Author: Vladislav A. Yastrebov (CNRS, Mines Paris - PSL)
 AI: Cursor, Claude, ChatGPT
-Date: Aug 2024-Sept 2025
+Date: Aug 2024-Nov 2025
 License: BSD 3-Clause
 """
 
@@ -329,7 +329,7 @@ def _filter_flux_numba(n, gaps, flux):
     
     return filtered_flux
 
-def solve_diffusion(n, g, solver="auto", save_matrix=False, save_matrix_type="coo"):
+def solve_diffusion(n, g, solver="auto", rtol=None, save_matrix=False, save_matrix_type="coo"):
     """Solve diffusion with external reservoir boundary conditions"""
     mean_gap = np.mean(g)
     if mean_gap <= 0:
@@ -354,7 +354,7 @@ def solve_diffusion(n, g, solver="auto", save_matrix=False, save_matrix_type="co
     # ************************ #
     # Solve the linear system  #
     # ************************ #
-    SOLVERS = ["none", "auto", "cholesky", "pardiso", "scipy-spsolve", "scipy", "petsc", "petsc-cg", "petsc-mumps"]
+    SOLVERS = ["none", "auto", "cholesky", "pardiso", "scipy-spsolve", "scipy", "petsc-cg", "petsc-mumps"]
 
     if '.' in solver:
         solver_name, preconditioner = solver.split('.')
@@ -370,6 +370,19 @@ def solve_diffusion(n, g, solver="auto", save_matrix=False, save_matrix_type="co
         solver_name = "petsc-cg"
         preconditioner = "hypre"
         logger.info("Auto-selecting 'petsc-cg' solver with 'hypre' preconditioner.")
+
+    # Define relative tolerance for iterative solvers
+    if solver_name in ["scipy", "petsc-cg"]:
+        if rtol is not None:
+            logger.info(f"Using user-defined relative tolerance for iterative solver: {rtol:.3e}")
+        else:
+            # Calculate relative tolerance based on gap field
+            max_gap_cubed = np.max(g**3)
+            if max_gap_cubed > 0:
+                rtol = min(1e-10, max_gap_cubed * 1e-12)
+                logger.info(f"Setting relative tolerance for iterative solver to {rtol:.3e} based on max gap.")
+            else:
+                raise ValueError("Invalid gap field for tolerance calculation")
     
     ####################################
     #     DIRECT CHOLESKY SOLVER       #
@@ -438,13 +451,6 @@ def solve_diffusion(n, g, solver="auto", save_matrix=False, save_matrix_type="co
             logger.error("Failed to create AMG preconditioner. Error: " + str(e))
             raise RuntimeError("Failed to create AMG preconditioner") from e
         
-        # Calculate relative tolerance based on gap field
-        max_gap_cubed = np.max(g**3)
-        if max_gap_cubed > 0:
-            rtol = min(1e-12, max_gap_cubed * 1e-14)
-        else:
-            raise ValueError("Invalid gap field for tolerance calculation")
-
         p, info = cg(A, b, M=M, rtol=rtol, maxiter=6000)
                 
         if info > 0:
@@ -456,7 +462,8 @@ def solve_diffusion(n, g, solver="auto", save_matrix=False, save_matrix_type="co
     ###########################################
     elif solver_name == "petsc-cg":
         from petsc4py import PETSc
-        A = A.tocsr()
+        if not hasattr(A, 'indptr'):
+            A = A.tocsr()
         A_p = PETSc.Mat().createAIJ(size=A.shape, csr=(A.indptr, A.indices, A.data))
         ksp = PETSc.KSP().create()
         ksp.setOperators(A_p)
@@ -481,7 +488,7 @@ def solve_diffusion(n, g, solver="auto", save_matrix=False, save_matrix_type="co
         # pc.setType('hypre')
         # pc.setType('ilu')
         # pc.setHYPREType('boomeramg')
-        ksp.setTolerances(rtol=1e-8)
+        ksp.setTolerances(rtol=rtol)
         ksp.setFromOptions()
         b_p = PETSc.Vec().createWithArray(b)
         x_p = b_p.duplicate()
@@ -548,7 +555,7 @@ def connectivity_analysis(gaps):
         logger.info("No percolation detected.")
         return None
 
-def solve_fluid_problem(gaps, solver, save_matrix=False, save_matrix_type="coo"):
+def solve_fluid_problem(gaps, solver, rtol = None, save_matrix=False, save_matrix_type="coo"):
     logger.info("Starting fluid solver.")
 
     n = gaps.shape[0]
@@ -574,7 +581,7 @@ def solve_fluid_problem(gaps, solver, save_matrix=False, save_matrix_type="coo")
     try:
         # Solve for pressure using dilated gaps
         start_time = time.time()
-        p = solve_diffusion(n, gaps_dilated, solver=solver, save_matrix=save_matrix, save_matrix_type=save_matrix_type)
+        p = solve_diffusion(n, gaps_dilated, solver=solver, rtol=rtol, save_matrix=save_matrix, save_matrix_type=save_matrix_type)
         logger.info("Fluid solver: CPU time for n = {0:d}: {1:.3f} sec".format(n, time.time() - start_time))
     except Exception as e:
         logger.error(f"Error in fluid solver: {e}")

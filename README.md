@@ -79,7 +79,7 @@ The fluid flow solver supports several linear system solvers and preconditioners
 | `petsc-mumps` | Direct | - | PETSc/MUMPS | MUMPS direct solver via PETSc. For moderate problems, five times slower than the fastest solver. |
 | `petsc-cg.ilu` | Iterative (CG) | ILU | PETSc | CG with Incomplete LU factorization. The slowest. |
 
-Relevant CPU times for a relatively small problem with $N\times N = 2000\times 2000$ grid points.
+Relevant CPU times for a relatively small problem with $N\times N = 2000\times 2000$ grid points (relative tolerance for iterative solvers was set to 1e-8).
 
 | **Solver**                    | **CPU time (s)** |
 |-------------------------------|-----------------:|
@@ -99,7 +99,7 @@ Relevant CPU times for a relatively small problem with $N\times N = 2000\times 2
 - For large-scale problems (for $N>2000$): use `petsc-cg.hypre`;
 - Avoid `petsc-cg.ilu`.
 
-The most reliable solvers for big problems are `petsc-cg.hypre` and `pardiso`. Here are the test data obtained on rough "contact" problems on Intel(R) Xeon(R) Platinum 8488C. Only solver's time is shown.
+The most reliable solvers for big problems are `petsc-cg.hypre` and `pardiso`. Here are the test data obtained on rough "contact" problems on Intel(R) Xeon(R) Platinum 8488C. Only solver's time is shown (relative tolerance for PETSc-CG.Hypre was set to 1e-8).
 
 <table>
   <thead>
@@ -119,12 +119,9 @@ The most reliable solvers for big problems are `petsc-cg.hypre` and `pardiso`. H
 
 **CPU/RAM Performance**
 
-Performance of the code on a truncated rough surface is shown below. The peak memory consumption and the CPU time required to perform connectivity analysis, constructing the matrix and solving the linear system are provided. The real number of DOFs is reported which corresponds to approximately 84% of the square grid $N\times N$ for $N\in\{500, 1\,000, 2\,000, 4\,000, 6\,000, 8\,000, 16\,000\}$.
+Performance of the code on a truncated rough surface is shown below. The peak memory consumption and the CPU time required to perform connectivity analysis, constructing the matrix and solving the linear system are provided. The real number of DOFs is reported which corresponds to approximately 84% of the square grid $N\times N$ for $N\in\{500, 1\,000, 2\,000, 4\,000, 6\,000, 8\,000, 16\,000\}$ (relative tolerance for iterative solvers was set to 1e-8).
 
 ![CPU and RAM performance of the solver](./docs/img/CPU_RAM_real_dof_performance.png)
-
-
-
 
 
 ## Illustration

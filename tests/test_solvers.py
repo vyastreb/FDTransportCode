@@ -128,7 +128,7 @@ def _test_solver(solver_name, preconditioner, gaps, N0):
     try:
         # Time the solver
         start_time = time.time()
-        filtered_gaps, pressure, flux = FS.solve_fluid_problem(gaps.copy(), solver_str)
+        filtered_gaps, pressure, flux = FS.solve_fluid_problem(gaps.copy(), solver_str, rtol=1e-8)
         elapsed_time = time.time() - start_time
         
         # Check if solution was found

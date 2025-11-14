@@ -7,7 +7,7 @@
 An efficient python code to solve diffusion equation on a Cartesian and polar grids:
 + Reynolds equation: $\quad\nabla\cdot\left(g^3 \nabla p\right) = 0$
 + Inlet/outlet pressure: $\quad p(x=0) = 1, \quad p(x=1) = 0$
-+ Periodic boundary conditions: $\quad p(y=0) = p(y=1), \quad \left.\frac{\partial p}{\partial y}\right|_{y=0} = \left.\frac{\partial p}{\partial y}\right|_{y=1}$
++ Periodic boundary conditions: $\quad p(y=0) = p(y=1)$, $\frac{\partial p}{\partial x}(x,y=0) = \frac{\partial p}{\partial x}(x,y=1)$
 
 <!-- ![equation to be solved](./docs/img/eq.png) -->
 

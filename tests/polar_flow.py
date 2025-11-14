@@ -15,18 +15,25 @@ from fluxflow import random_field as RF
 
 
 # Geometry and surface parameters
-A = 0.1
-WAVE_AMPLITUDE = 0.02
-ROUGHNESS_RMS = A / 5.0
-K_THETA = 6
-K_RADIAL = 10
-R_INNER = 1.5
-R_OUTER = 2.0
+# A = 0.1
+# WAVE_AMPLITUDE = 0.02
+# ROUGHNESS_RMS = A / 5.0
+# R_INNER = 1.5
+# R_OUTER = 2.0
+
+A = 0.
+WAVE_AMPLITUDE = 0.0
+ROUGHNESS_RMS = 0.2
+R_INNER = 0.5
+R_OUTER = 3.0
+
+K_THETA = 1
+K_RADIAL = 1
 THETA_EXTENT = 2.0 * np.pi
 THETA_BC = "periodic"
 
 # Discretization
-N_R = 1000
+N_R = 2000
 N_THETA = int(N_R / (R_OUTER - R_INNER) * np.pi * (R_OUTER + R_INNER))
 N_CART = int(2 * (R_OUTER) * 2 * N_R / (R_OUTER - R_INNER))  # Cartesian grid used for roughness generation (covers (2*r_e) x (2*r_e))
 
@@ -35,11 +42,11 @@ print(f"Mesh size: {N_R} x {N_THETA} = {N_R * N_THETA}")
 # Roughness spectrum parameters (similar to other tests)
 HURST = 0.8
 K_LOW = 40.0 / N_CART
-K_HIGH = 800.0 / N_CART
+K_HIGH = 1500.0 / N_CART
 RNG_SEED = 239
 
 # Solver setup
-SOLVER = "petsc-cg.hypre"
+SOLVER = "pardiso" #petsc-cg.hypre"
 RTOL = 1e-9
 BASE_GAP = 0.3  # Ensures positive mean gap after superposition
 
@@ -179,7 +186,7 @@ if __name__ == "__main__":
 
     log_flux_intensity = np.log10(flux_intensity)
     pcm2 = axes[2].pcolormesh(
-        X, Y, log_flux_intensity, cmap="jet", shading="auto", vmin=-6, vmax=-3
+        X, Y, log_flux_intensity, cmap="jet", shading="auto", vmin=-7, vmax=-2
     )
     axes[2].set_title("Flux intensity |q|")
     cbar2 = fig.colorbar(pcm2, ax=axes[2], shrink=0.9, pad=0.02)
@@ -196,7 +203,7 @@ if __name__ == "__main__":
         cbar.outline.set_visible(False)
 
     fig.subplots_adjust(left=0.02, right=0.98, bottom=0.02, top=0.88, wspace=0.12)
-    fig.savefig("polar_flow.png", dpi=800, bbox_inches="tight", pad_inches=0.02)
+    fig.savefig("polar_flow.png", dpi=2000, bbox_inches="tight", pad_inches=0.02)
 
     for ax in axes:
         ax.set_aspect("equal")

@@ -4,17 +4,12 @@
 
 ## Description
 
-An efficient python code to solve diffusion equation on a Cartesian grid:
-<!-- $$
-\begin{aligned}
-&\nabla\cdot\left(g^3 \nabla p\right) = 0,\\
-&p(x=0) = 1, \quad p(x=1) = 0,\\ 
-&p(y=0) = p(y=1), \quad 
-\left.\frac{\partial p}{\partial y}\right|_{y=0} =
-\left.\frac{\partial p}{\partial y}\right|_{y=1}
-\end{aligned}
-$$ -->
-![equation to be solved](./docs/img/eq.png)
+An efficient python code to solve diffusion equation on a Cartesian and polar grids:
++ Reynolds equation: $\quad\nabla\cdot\left(g^3 \nabla p\right) = 0$
++ Inlet/outlet pressure: $\quad p(x=0) = 1, \quad p(x=1) = 0$
++ Periodic boundary conditions: $\quad p(y=0) = p(y=1), \quad \left.\frac{\partial p}{\partial y}\right|_{y=0} = \left.\frac{\partial p}{\partial y}\right|_{y=1}$
+
+<!-- ![equation to be solved](./docs/img/eq.png) -->
 
 ## What can it do?
 
@@ -62,7 +57,11 @@ if flux is not None:
 ```bash
 python -m pytest -q
 ```
-5. Or run these tests manually `/tests/test_evolution.py`, `/tests/test_solve.py` and `/tests/test_solvers.py`.
+5. Or run these tests manually:
++ Solves the flux evolution problem: `/tests/test_evolution.py`
++ Solves flux problem on a Cartesian grid: `/tests/test_solve.py` 
++ Solves flux problem on a polar grid: `/tests/polar_flow.py`
++ Tests all solvers: `/tests/test_solvers.py`.
 
 ## Available Solvers and Preconditioners
 
@@ -70,8 +69,8 @@ The fluid flow solver supports several linear system solvers and preconditioners
 
 | Solver String | Solver Type | Preconditioner | Backend | Description |
 |---------------|-------------|----------------|---------|-------------|
-| `petsc-cg.hypre` | Iterative (CG) | HYPRE | PETSc | 🥇 CG with HYPRE BoomerAMG. The fastest for moderate problems. |
 | `pardiso` | Direct | - | Intel MKL | 🥇PARDISO direct solver. The fastest for bigger problems, but consumes a lot of memory. |
+| `petsc-cg.hypre` | Iterative (CG) | HYPRE | PETSc | 🥇 CG with HYPRE BoomerAMG. The fastest for moderate problems. |
 | `scipy.amg-rs` | Iterative (CG) | AMG (Ruge-Stuben) | SciPy/PyAMG | CG with Ruge-Stuben AMG. Only two times slower than the fastest.  |
 | `scipy.amg-smooth_aggregation` | Iterative (CG) | AMG (Smoothed Aggregation) | SciPy/PyAMG | CG with Smoothed Aggregation AMG. Memory efficient, but relatively slow.|
 | `cholesky` | Direct | - | scikit-sparse | CHOLMOD Cholesky decomposition. Slightly lower memory consumption for huge problems, but it is slow. |
@@ -139,7 +138,7 @@ Another example for a grid $N\times N = 20\,000 \times 20\,000$. Simulation time
 + Author: Vladislav A. Yastrebov (CNRS, Mines Paris - PSL)
 + AI usage: Cursor & Copilot (different models), ChatGPT 4o, 5, Claude Sonnet 3.7, 4, 4.5
 + License: BSD 3-clause
-+ Date: Sept-Oct 2025
++ Date: Sept-Nov 2025
 
 
 

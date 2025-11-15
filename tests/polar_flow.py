@@ -33,7 +33,7 @@ THETA_EXTENT = 2.0 * np.pi
 THETA_BC = "periodic"
 
 # Discretization
-N_R = 2000
+N_R = 1000
 N_THETA = int(N_R / (R_OUTER - R_INNER) * np.pi * (R_OUTER + R_INNER))
 N_CART = int(2 * (R_OUTER) * 2 * N_R / (R_OUTER - R_INNER))  # Cartesian grid used for roughness generation (covers (2*r_e) x (2*r_e))
 
@@ -130,6 +130,8 @@ def run_annulus_simulation():
     g_annulus -= 0.2
     g_annulus[g_annulus < 0] = 0
 
+    import time
+    start_time = time.time()
     gaps_filtered, pressure, flux, dr, dtheta = solve_fluid_problem_polar(
         gaps=g_annulus,
         r_inner=R_INNER,
@@ -142,6 +144,10 @@ def run_annulus_simulation():
         p_outer=0.0,
         dilation_iterations=1,
     )
+    end_time = time.time()
+    print(f"Solver time: {end_time - start_time:.2f} seconds")
+
+    exit(0)
 
     if gaps_filtered is None or flux is None or pressure is None:
         raise RuntimeError("Polar solver failed to find a percolating channel.")

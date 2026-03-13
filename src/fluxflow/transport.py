@@ -575,6 +575,9 @@ def solve_fluid_problem(gaps, solver, rtol = None, save_matrix=False, save_matri
     gaps_original = connectivity_analysis(gaps)
     logger.info("Connectivity analysis: CPU time  = {1:.3f} sec".format(n, time.time() - start))
 
+    if gaps_original is None:
+        logger.info("No percolating path found. Returning None.")
+        return None, None, None
     
     # Apply dilation before solving to preserve boundary data
     logger.info("Applying dilation to preserve boundary channels.")

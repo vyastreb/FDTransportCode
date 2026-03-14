@@ -1,4 +1,4 @@
-![Reynolds Fluid Solver](./docs/img/header.png)
+![Reynolds Fluid Solver](./docs/img/header.jpg)
 
 # Finite-Difference Reynolds Fluid Solver
 

@@ -3,11 +3,10 @@ Finite-Difference Reynolds Fluid Flow Solver
 
 Author: Vladislav A. Yastrebov (CNRS, Mines Paris - PSL)
 AI: Cursor, Claude, ChatGPT
-Date: Aug 2024-Nov 2025
+Date: Aug 2024-Mar 2026
 License: BSD 3-Clause
 """
 
-# FIXME: something wrong happens over connections of 1 grid cell thickness.
 # TODO: adapt for compressible fluids (requires only postprocessing)
 
 import numpy as np
@@ -524,36 +523,49 @@ def solve_diffusion(n, g, solver="auto", rtol=None, save_matrix=False, save_matr
 def connectivity_analysis(gaps):
     binary = gaps > 0
     n = gaps.shape[0]
-    labels = label(binary, connectivity=1)  # 4-connectivity is faster
-    
-    # Efficient periodic boundary conditions
-    left_boundary = labels[:, 0]
-    right_boundary = labels[:, -1]
-    
-    # Create label mapping for merging
-    merge_map = {}
+    labels = label(binary, connectivity=1)  # 4-connectivity
+
+    max_label = int(labels.max())
+    if max_label == 0:
+        logger.info("No open cells found.")
+        return None
+
+    # Union-find with path compression for transitive periodic merging
+    parent = list(range(max_label + 1))
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]   # path compression
+            x = parent[x]
+        return x
+
+    def union(a, b):
+        a, b = find(a), find(b)
+        if a != b:
+            parent[b] = a
+
+    # Merge clusters that touch both sides of the periodic (j) boundary
     for i in range(n):
-        left_label = left_boundary[i]
-        right_label = right_boundary[i] 
-        if left_label > 0 and right_label > 0 and left_label != right_label:
-            merge_map[right_label] = left_label
-    
-    # Apply merging (single pass)
-    if merge_map:
-        for old_label, new_label in merge_map.items():
-            labels[labels == old_label] = new_label
-    
-    # Fast percolation check using sets
-    top_labels = set(labels[0, :]) - {0}
-    bottom_labels = set(labels[-1, :]) - {0}
-    
-    percolating_labels = top_labels & bottom_labels
-    
+        ll = int(labels[i, 0])
+        rl = int(labels[i, -1])
+        if ll > 0 and rl > 0:
+            union(ll, rl)
+
+    # Relabel every cell with the root of its component
+    for idx in np.ndindex(labels.shape):
+        if labels[idx] > 0:
+            labels[idx] = find(int(labels[idx]))
+
+    # Percolation check: cluster spans from i=0 (west, p=0) to i=n-1 (east, p=1)
+    west_labels = set(int(v) for v in labels[0, :]  if v > 0)
+    east_labels = set(int(v) for v in labels[-1, :] if v > 0)
+
+    percolating_labels = west_labels & east_labels
+
     if percolating_labels:
         selected_color = next(iter(percolating_labels))
         logger.info(f"Percolation detected with label {selected_color}")
-        gaps_original = gaps * (labels == selected_color)
-        return gaps_original
+        return gaps * (labels == selected_color)
     else:
         logger.info("No percolation detected.")
         return None
@@ -578,36 +590,29 @@ def solve_fluid_problem(gaps, solver, rtol = None, save_matrix=False, save_matri
     if gaps_original is None:
         logger.info("No percolating path found. Returning None.")
         return None, None, None
-    
-    # Apply dilation before solving to preserve boundary data
-    logger.info("Applying dilation to preserve boundary channels.")
-    gaps_dilated = _dilate_gaps_numba(gaps_original, iterations=1)
 
     logger.info("Solving diffusion problem.")
     try:
-        # Solve for pressure using dilated gaps
         start_time = time.time()
-        p = solve_diffusion(n, gaps_dilated, solver=solver, rtol=rtol, save_matrix=save_matrix, save_matrix_type=save_matrix_type)
+        p = solve_diffusion(n, gaps_original, solver=solver, rtol=rtol, save_matrix=save_matrix, save_matrix_type=save_matrix_type)
         logger.info("Fluid solver: CPU time for n = {0:d}: {1:.3f} sec".format(n, time.time() - start_time))
     except Exception as e:
         logger.error(f"Error in fluid solver: {e}")
         return None, None, None
 
     logger.info("Fluid solver finished.")
-    logger.info("Calculating flux with simple boundary condition approach.")
+    logger.info("Calculating flux.")
 
-    # Calculate gradients with proper boundary conditions
+    # One-sided differences at open/closed interfaces guarantee zero normal flux
+    # at domain boundaries without needing dilation.
     dx = 1 / (n - 1)
-    dpdx, dpdy = _calculate_gradients_simple_bc(n, p, dx, gaps_original)
+    dpdx, dpdy = _calculate_gradients_with_bc_numba(n, p, dx, gaps_original)
 
-    # Use numba-accelerated flux calculation with ORIGINAL gaps
     flux = _calculate_flux_numba(n, gaps_original, dpdx, dpdy)
-    # filtered_flux = _filter_flux_numba(n, gaps_original, flux)
-    
+
     logger.info("finished.")
 
     return gaps_original, p, flux
-    # return gaps_original, p, filtered_flux
 
 def get_preconditioner(A, method = "amg.rs"):
     if method == "amg-smooth_aggregation":

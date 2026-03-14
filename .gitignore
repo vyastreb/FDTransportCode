@@ -12,3 +12,9 @@ REF/
 *.npz
 *.png
 *.swp
+dev/
+docs/HELP.md
+docs/HPC.md
+src/fluxflow.egg-info/
+src/fluxflow/__init__.py
+tests/test_solvers.result

@@ -7,3 +7,7 @@ minimal_test.py
 new_CPU_RAM_performance.pdf
 performance_test.py
 plot_CPU_performance.py
+Beauty/
+REF/
+*.npz
+*.png

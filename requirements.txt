@@ -7,3 +7,4 @@ petsc4py
 matplotlib
 scikit-image
 scikit-sparse
+rfgen

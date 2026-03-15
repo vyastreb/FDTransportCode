@@ -10,8 +10,8 @@ Roughness RMS is constrained to A / 3.
 
 import numpy as np
 
-from fluxflow.transport_polar import solve_fluid_problem_polar, compute_total_flux_polar
-from fluxflow import random_field as RF
+from rfgen import selfaffine_field
+from reynoldsflow.transport_polar import solve_fluid_problem_polar, compute_total_flux_polar
 
 
 # Geometry and surface parameters
@@ -54,7 +54,7 @@ BASE_GAP = 0.3  # Ensures positive mean gap after superposition
 def generate_cartesian_roughness() -> np.ndarray:
     """Generate a periodic rough surface on a square domain (2 * r_e)^2."""
     np.random.seed(RNG_SEED)
-    surface = RF.periodic_gaussian_random_field(
+    surface = selfaffine_field(
         dim=2,
         N=N_CART,
         Hurst=HURST,

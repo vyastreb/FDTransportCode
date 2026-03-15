@@ -15,6 +15,7 @@ REF/
 dev/
 docs/HELP.md
 docs/HPC.md
-src/fluxflow.egg-info/
-src/fluxflow/__init__.py
+src/reynoldsflow.egg-info/
+dist/
+build/
 tests/test_solvers.result

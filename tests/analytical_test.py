@@ -13,8 +13,8 @@ import pytest
 from numpy.testing import assert_allclose
 from scipy.sparse.linalg import spsolve
 
-from fluxflow.transport import create_diffusion_matrix, face_k
-from fluxflow.transport_polar import create_diffusion_matrix_polar
+from reynoldsflow.transport import create_diffusion_matrix, face_k
+from reynoldsflow.transport_polar import create_diffusion_matrix_polar
 
 TOL_CART = 1e-5
 TOL_POLAR = 1e-5

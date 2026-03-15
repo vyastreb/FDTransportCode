@@ -13,8 +13,8 @@ from numpy.fft import ifft2, fftfreq, fftshift, ifftshift, fftn, ifftn
 import time
 
 
-from fluxflow import transport as FS
-from fluxflow import random_field as RF
+from reynoldsflow import transport as FS
+from rfgen import selfaffine_field
  # https://github.com/vyastreb/SelfAffineSurfaceGenerator
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
@@ -33,7 +33,7 @@ def test_solve():
     np.random.seed(seed)
 
     # Generate a normalized random field
-    random_field = RF.periodic_gaussian_random_field(dim = dim, N = N0, Hurst = Hurst, k_low = k_low, k_high = k_high, plateau = plateau)
+    random_field = selfaffine_field(dim = dim, N = N0, Hurst = Hurst, k_low = k_low, k_high = k_high, plateau = plateau)
     random_field /= np.std(random_field)
 
     x = np.linspace(0, 1, N0)

@@ -34,43 +34,42 @@ An efficient Python code to solve the diffusion equation on Cartesian and polar 
 
 ## Usage
 
-1. Clone the repository
-```bash 
-git clone git@github.com:vyastreb/FDTransportCode.git
-cd FDTransportCode
-```
-2. Install the package and its dependencies
+1. Install the package
 ```bash
-pip install -e .
-pip install -r requirements.txt
+pip install reynoldsflow
 ```
-or with conda
+The default solver is `scipy.amg-rs` (SciPy CG + Ruge-Stüben AMG via `pyamg`), included in the base install.
+For optional high-performance solvers (PARDISO, PETSc, CHOLMOD):
 ```bash
-conda install --file requirements.txt
+pip install reynoldsflow[solvers]
 ```
-3. Run a minimal test (incompressible potential flow around a circular inclusion)
+With `[solvers]`, `solver="auto"` selects `petsc-cg.hypre` as the fastest option.
+
+2. Run a minimal example (flow around a circular inclusion)
 ```python
 import numpy as np
-from fluxflow import transport as FS
 import matplotlib.pyplot as plt
+from reynoldsflow import transport as FS
 
 n = 100
 X, Y = np.meshgrid(np.linspace(0, 1, n), np.linspace(0, 1, n))
 gaps = (np.sqrt((X - 0.5)**2 + (Y - 0.5)**2) > 0.2).astype(float)
 
-_, _, flux = FS.solve_fluid_problem(gaps, solver="auto")
+_, _, flux = FS.solve_fluid_problem(gaps, solver="scipy.amg-rs")
 if flux is not None:
     plt.imshow(np.sqrt(flux[:, :, 0]**2 + flux[:, :, 1]**2),
                origin='lower', cmap='jet')
     plt.show()
 ```
-4. Run the test suit
+
+3. Run the test suite
 ```bash
 python -m pytest -q
 ```
-5. Or run these tests manually:
+
+4. Or run these tests manually:
 + Solves the flux evolution problem: `/tests/test_evolution.py`
-+ Solves flux problem on a Cartesian grid: `/tests/test_solve.py` 
++ Solves flux problem on a Cartesian grid: `/tests/test_solve.py`
 + Solves flux problem on a polar grid: `/tests/polar_flow.py`
 + Tests all solvers: `/tests/test_solvers.py`.
 

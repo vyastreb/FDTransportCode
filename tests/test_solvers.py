@@ -15,8 +15,8 @@ import traceback
 import gc
 from datetime import datetime
 
-from fluxflow import transport as FS
-from fluxflow import random_field as RF
+from reynoldsflow import transport as FS
+from rfgen import selfaffine_field
 
 # import pytest
 # pytestmark = pytest.mark.skip(reason="WIP: Long test, run manually when needed.")
@@ -80,7 +80,7 @@ def generate_test_problem(N0, k_low, k_high, Hurst=0.5, seed=23349, delta=3.):
     np.random.seed(seed)
     
     # Generate normalized random field
-    random_field = RF.periodic_gaussian_random_field(
+    random_field = selfaffine_field(
         dim=2, 
         N=N0, 
         Hurst=Hurst, 
